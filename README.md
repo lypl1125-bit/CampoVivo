@@ -1,2 +1,3 @@
 # CampoVivo
 Sitio web para el manejo de granjas agroecológicas en Santander.
+El prototipo funcional de CampoVivo integra en una aplicación web interactiva los principales flujos operativos de la platafocal ante cortes de conectividad rural, el control financiero y de inventario sincronizado, la tienda directa con aplicación de cupones y generación de factura digital, y el portal de evaluación e inversión en granjas, respaldado por persistencia local y conexión con Supabase.rma para granjas agroecológicas de Santander, articulando la gestión por roles (Agricultor, Cliente e Inversionista), la captura de ubicación georreferenciada con mapa interactivo de municipios y veredas, el monitoreo de telemetría ambiental con simulador MQTT y respaldo offline-first en búfer.
