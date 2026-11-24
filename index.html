@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CampoVivo — Plataforma Agroecológica e IoT (Prototipo v1.1)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js para gráficos de telemetría -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Leaflet CSS & JS para mapa interactivo de selección GPS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Google Fonts: Newsreader (editorial) + Inter (UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            campo: {
+              bg: '#FAF8F2',
+              header: '#E7EBD3',
+              card: '#FFFFFF',
+              border: '#E5E7DC',
+              forest: '#143820',
+              forestHover: '#0D2716',
+              leaf: '#1F5C2E',
+              amber: '#E8A838',
+              amberHover: '#D69524',
+              ink: '#1A241D',
+              muted: '#66736A',
+              alertBg: '#FDECEB',
+              alertBorder: '#F5C2C0',
+              alertText: '#B42318'
+            }
+          },
+          fontFamily: {
+            serif: ['Newsreader', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #FAF8F2;
+      color: #1A241D;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .font-editorial {
+      font-family: 'Newsreader', Georgia, serif;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #FFFFFF !important; }
+      #invoiceModal { position: static !important; background: transparent !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Barra superior utilitaria de demo / navegación rápida -->
+  <div id="demoBar" class="no-print bg-campo-forest text-white text-xs px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-2">
+      <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span class="font-medium">CampoVivo</span>
+      <span id="dbStatusBadge" class="px-2 py-0.5 rounded-full bg-white/10 text-emerald-100 text-[11px]">Modo Local</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="navigateTo('store')" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 transition">Ir a Tienda Pública</button>
+      <button onclick="logoutSession()" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 transition">Cerrar sesión</button>
+      <button onclick="resetDemoData()" class="px-2.5 py-1 rounded bg-campo-amber text-campo-ink font-semibold hover:bg-campo-amberHover transition">Restaurar Demo</button>
+    </div>
+  </div>
+
+  <!-- Notificación Toast -->
+  <div id="toast" class="no-print fixed bottom-5 right-5 z-50 hidden max-w-sm rounded-xl bg-campo-forest text-white px-4 py-3 shadow-lg border border-emerald-700 text-sm flex items-start gap-2.5">
+    <span id="toastIcon">🌱</span>
+    <div id="toastMessage" class="leading-snug"></div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- VISTA 1: LOGIN Y REGISTRO MULTI-ROL (US 1.1.1, US 1.1.2, US 1.2.1)     -->
+  <!-- ===================================================================== -->
+  <section id="view-login" class="flex-1 grid grid-cols-1 lg:grid-cols-2 min-h-[calc(100vh-36px)]">
+    <!-- Columna Izquierda: Fotografía / Escena de Campo -->
+    <div class="relative min-h-[280px] lg:min-h-full bg-campo-forest flex flex-col justify-between p-8 lg:p-12 overflow-hidden">
+      <img
+        src="https://images.unsplash.com/photo-1500937359356-2833e3415030?auto=format&fit=crop&w=1400&q=80"
+        alt="Cultivos agroecológicos en las montañas de Santander"
+        onerror="this.src='https://placehold.co/1200x900/143820/FAF8F2?text=CampoVivo+Santander+-+Agroecologia+e+IoT'"
+        class="absolute inset-0 w-full h-full object-cover opacity-75"
+      />
+      <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/20"></div>
+
+      <div class="relative z-10 inline-flex items-center gap-2 self-start bg-black/40 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full border border-white/15">
+        <span>📡</span>
+        <span>Telemetría ESP32 • Offline-First • Comercio Directo</span>
+      </div>
+
+      <div class="relative z-10 max-w-lg">
+        <blockquote class="font-editorial text-white text-3xl sm:text-4xl lg:text-5xl leading-tight">
+          “Ahora sé cuándo regar sin salir de casa.”
+        </blockquote>
+        <p class="text-emerald-100/90 text-sm mt-3">
+          Granjas agroecológicas de Santander conectadas con sensores ambientales, control contable sin conexión y venta directa sin intermediarios.
+        </p>
+      </div>
+    </div>
+
+    <!-- Columna Derecha: Formulario de Acceso / Registro -->
+    <div class="flex items-center justify-center p-6 sm:p-10 lg:p-14 bg-campo-bg overflow-y-auto">
+      <div class="w-full max-w-md">
+        <!-- Marca -->
+        <div class="flex items-center justify-between gap-2 mb-6">
+          <div class="flex items-center gap-2">
+            <span class="text-campo-leaf text-xl">🌱</span>
+            <span class="font-editorial text-2xl font-semibold text-campo-forest tracking-tight">CampoVivo</span>
+          </div>
+          <div class="inline-flex rounded-lg bg-[#EFECE3] p-1 text-xs font-medium">
+            <button id="authTabLogin" type="button" onclick="switchAuthMode('login')" class="px-3 py-1.5 rounded-md bg-white text-campo-ink shadow-sm transition">Iniciar sesión</button>
+            <button id="authTabRegister" type="button" onclick="switchAuthMode('register')" class="px-3 py-1.5 rounded-md text-campo-muted hover:text-campo-ink transition">Registrarse</button>
+          </div>
+        </div>
+
+        <!-- MODO INICIAR SESIÓN -->
+        <div id="loginFormContainer">
+          <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink mb-6">Bienvenido de vuelta</h1>
+
+          <!-- Selector de Rol -->
+          <div class="grid grid-cols-3 gap-1.5 bg-[#EFECE3] p-1.5 rounded-xl mb-6">
+            <button type="button" data-role="Agricultor" onclick="selectLoginRole('Agricultor')" class="role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium bg-white text-campo-ink shadow-sm transition">
+              Agricultor
+            </button>
+            <button type="button" data-role="Cliente" onclick="selectLoginRole('Cliente')" class="role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium text-campo-muted hover:text-campo-ink transition">
+              Cliente
+            </button>
+            <button type="button" data-role="Inversionista" onclick="selectLoginRole('Inversionista')" class="role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium text-campo-muted hover:text-campo-ink transition">
+              Inversionista
+            </button>
+          </div>
+
+          <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+            <div>
+              <label for="loginEmail" class="block text-sm font-medium text-campo-ink mb-1.5">Correo electrónico</label>
+              <input
+                id="loginEmail"
+                type="email"
+                required
+                placeholder="tu@granja.co"
+                value="agricultor@campovivo.co"
+                class="w-full rounded-xl border border-campo-border bg-white px-4 py-3 text-sm text-campo-ink focus:outline-none focus:ring-2 focus:ring-campo-leaf"
+              />
+            </div>
+
+            <div>
+              <label for="loginPassword" class="block text-sm font-medium text-campo-ink mb-1.5">Contraseña</label>
+              <input
+                id="loginPassword"
+                type="password"
+                required
+                placeholder="••••••••"
+                value="123"
+                class="w-full rounded-xl border border-campo-border bg-white px-4 py-3 text-sm text-campo-ink focus:outline-none focus:ring-2 focus:ring-campo-leaf"
+              />
+            </div>
+
+            <div id="loginFeedback" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-medium border"></div>
+
+            <button
+              id="loginSubmitBtn"
+              type="submit"
+              class="w-full rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white font-medium py-3.5 px-4 text-sm transition shadow-sm"
+            >
+              Ingresar como Agricultor
+            </button>
+          </form>
+
+          <p class="text-center text-xs text-campo-muted mt-5">
+            ¿No tienes cuenta?
+            <button type="button" onclick="switchAuthMode('register')" class="text-campo-leaf font-semibold hover:underline">Regístrate aquí</button>
+          </p>
+
+          <!-- Accesos rápidos para sustentación -->
+          <div class="mt-6 pt-5 border-t border-campo-border">
+            <p class="text-[11px] uppercase tracking-wider text-campo-muted font-semibold mb-2.5">Acceso rápido para demo (1 clic)</p>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="quickDemoLogin('Agricultor')" class="rounded-lg border border-campo-border bg-white hover:bg-emerald-50/60 py-2 px-2 text-xs font-medium text-campo-ink transition">
+                🌾 Agricultor
+              </button>
+              <button type="button" onclick="quickDemoLogin('Cliente')" class="rounded-lg border border-campo-border bg-white hover:bg-emerald-50/60 py-2 px-2 text-xs font-medium text-campo-ink transition">
+                🛒 Cliente
+              </button>
+              <button type="button" onclick="quickDemoLogin('Inversionista')" class="rounded-lg border border-campo-border bg-white hover:bg-emerald-50/60 py-2 px-2 text-xs font-medium text-campo-ink transition">
+                📈 Inversor
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODO REGISTRO MULTI-ROL -->
+        <div id="registerFormContainer" class="hidden">
+          <h1 class="font-editorial text-3xl text-campo-ink mb-2">Crear cuenta en CampoVivo</h1>
+          <p class="text-xs text-campo-muted mb-5">Regístrate como Agricultor (y crea tu granja), Inversionista o Cliente.</p>
+
+          <!-- Selector de Rol en Registro -->
+          <div class="grid grid-cols-3 gap-1.5 bg-[#EFECE3] p-1.5 rounded-xl mb-5">
+            <button type="button" data-reg-role="Agricultor" onclick="selectRegisterRole('Agricultor')" class="reg-role-btn py-2 px-2 rounded-lg text-xs font-medium bg-white text-campo-ink shadow-sm transition">
+              Agricultor
+            </button>
+            <button type="button" data-reg-role="Cliente" onclick="selectRegisterRole('Cliente')" class="reg-role-btn py-2 px-2 rounded-lg text-xs font-medium text-campo-muted hover:text-campo-ink transition">
+              Cliente
+            </button>
+            <button type="button" data-reg-role="Inversionista" onclick="selectRegisterRole('Inversionista')" class="reg-role-btn py-2 px-2 rounded-lg text-xs font-medium text-campo-muted hover:text-campo-ink transition">
+              Inversionista
+            </button>
+          </div>
+
+          <form id="registerForm" onsubmit="handleRegisterSubmit(event)" class="space-y-3.5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="regName" class="block text-xs font-medium text-campo-ink mb-1">Nombre completo</label>
+                <input id="regName" type="text" required placeholder="Ej. Sofía Rincón" class="w-full rounded-xl border border-campo-border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-campo-leaf" />
+              </div>
+              <div>
+                <label for="regEmail" class="block text-xs font-medium text-campo-ink mb-1">Correo electrónico</label>
+                <input id="regEmail" type="email" required placeholder="sofia@campovivo.co" class="w-full rounded-xl border border-campo-border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-campo-leaf" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="regPhone" class="block text-xs font-medium text-campo-ink mb-1">Teléfono</label>
+                <input id="regPhone" type="tel" required maxlength="13" placeholder="Ej. 3154892011" class="w-full rounded-xl border border-campo-border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-campo-leaf" />
+              </div>
+              <div>
+                <label for="regPassword" class="block text-xs font-medium text-campo-ink mb-1">Contraseña</label>
+                <input id="regPassword" type="password" required minlength="3" placeholder="Crea tu contraseña" class="w-full rounded-xl border border-campo-border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-campo-leaf" />
+              </div>
+            </div>
+
+            <div id="farmerDocumentField" class="hidden">
+              <label for="regDocument" class="block text-xs font-medium text-campo-ink mb-1">Documento de identidad (Agricultor)</label>
+              <input id="regDocument" type="text" maxlength="20" placeholder="Ej. 1098765432" class="w-full rounded-xl border border-campo-border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-campo-leaf" />
+            </div>
+
+            <div id="farmerFarmFields" class="hidden rounded-xl bg-emerald-50/70 border border-emerald-200/80 p-3.5 space-y-3">
+              <p class="text-xs font-semibold text-campo-forest">Datos de tu granja en Santander</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label for="regFarmName" class="block text-[11px] font-medium text-campo-ink mb-1">Nombre de la granja</label>
+                  <input id="regFarmName" type="text" placeholder="Ej. Finca El Mirador" class="w-full rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label for="regMunicipality" class="block text-[11px] font-medium text-campo-ink mb-1">Municipio</label>
+                  <input id="regMunicipality" type="text" value="Girón" oninput="syncGpsByMunicipality()" placeholder="Ej. Girón, Piedecuesta" class="w-full rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label for="regFarmArea" class="block text-[11px] font-medium text-campo-ink mb-1">Área (ha)</label>
+                  <input id="regFarmArea" type="text" value="3.5 ha" class="w-full rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label for="regMainCrop" class="block text-[11px] font-medium text-campo-ink mb-1">Cultivo principal</label>
+                  <input id="regMainCrop" type="text" value="Café y Hortalizas" class="w-full rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label for="regFundingGoal" class="block text-[11px] font-medium text-campo-ink mb-1">Meta inversión (COP)</label>
+                  <input id="regFundingGoal" type="number" min="1000000" step="500000" value="18000000" class="w-full rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-1">
+                  <label for="regGpsCoords" class="block text-[11px] font-medium text-campo-ink">Dirección GPS (latitud / longitud)</label>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="toggleFarmMapPicker()" class="text-[11px] font-semibold text-campo-forest hover:underline">
+                      🗺️ Elegir en mapa
+                    </button>
+                    <button type="button" onclick="detectFarmGps()" class="text-[11px] font-semibold text-campo-leaf hover:underline">
+                      📍 GPS en vivo
+                    </button>
+                  </div>
+                </div>
+                <input id="regGpsCoords" type="text" value="POINT(7.0678 -73.1704)" placeholder="POINT(lat lon)" oninput="syncMapFromGpsInput()" class="w-full rounded-lg border border-campo-border bg-white px-3 py-2 text-xs font-mono" />
+                <p id="regGpsStatus" class="text-[10px] text-campo-muted mt-1">Usa GPS en vivo, selecciona un punto en el mapa o escribe el municipio.</p>
+                <div id="farmMapContainer" class="hidden mt-2 space-y-2">
+                  <div class="flex flex-col sm:flex-row gap-1.5">
+                    <input
+                      id="farmPlaceSearch"
+                      type="text"
+                      placeholder="Buscar municipio o vereda en Santander (ej. Ruitoque, Barichara, Mesa de los Santos)..."
+                      oninput="filterAndFocusSantanderPlace()"
+                      class="flex-1 rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-campo-leaf"
+                    />
+                    <button
+                      type="button"
+                      onclick="focusSearchedSantanderPlace()"
+                      class="rounded-lg bg-campo-forest hover:bg-campo-forestHover text-white px-3 py-1.5 text-xs font-medium transition shrink-0"
+                    >
+                      Ubicar
+                    </button>
+                  </div>
+                  <div id="farmPlaceSuggestions" class="hidden rounded-lg border border-campo-border bg-white divide-y divide-campo-border max-h-32 overflow-y-auto text-xs"></div>
+                  <div id="farmPickerMap" class="h-52 w-full rounded-xl border border-campo-border z-10 shadow-2xs"></div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-campo-muted">
+                    <span>Haz clic en el mapa o arrastra el marcador para fijar el punto exacto.</span>
+                    <span id="farmMapZoomHint">Acércate (zoom ≥ 12) para ver más veredas y sectores rurales.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-1 border-t border-emerald-200/80">
+                <p class="text-[11px] font-medium text-campo-forest mb-1.5">Producto inicial para la tienda (opcional)</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input id="regProductName" type="text" placeholder="Ej. Cacao fino de aroma" class="sm:col-span-2 rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                  <input id="regProductPrice" type="number" min="500" step="100" placeholder="Precio COP" class="rounded-lg border border-campo-border bg-white px-3 py-1.5 text-xs" />
+                </div>
+              </div>
+            </div>
+
+            <div id="registerFeedback" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-medium border"></div>
+
+            <button
+              type="submit"
+              class="w-full rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white font-medium py-3 px-4 text-sm transition shadow-sm"
+            >
+              Crear cuenta y continuar
+            </button>
+          </form>
+
+          <p class="text-center text-xs text-campo-muted mt-4">
+            ¿Ya tienes cuenta?
+            <button type="button" onclick="switchAuthMode('login')" class="text-campo-leaf font-semibold hover:underline">Inicia sesión</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- VISTA 2: PANEL DEL AGRICULTOR (TELEMETRÍA IoT, CONTABILIDAD, INVENTARIO)-->
+  <!-- ===================================================================== -->
+  <section id="view-farmer" class="hidden flex-1 min-h-[calc(100vh-36px)] flex flex-col lg:flex-row">
+    <!-- Sidebar Oscura -->
+    <aside class="no-print w-full lg:w-60 bg-campo-forest text-white flex flex-col justify-between shrink-0">
+      <div>
+        <div class="p-5 flex items-center justify-between lg:justify-start gap-2.5 border-b border-white/10">
+          <div class="flex items-center gap-2.5">
+            <span class="text-emerald-300 text-xl">🌱</span>
+            <span class="font-editorial text-2xl font-semibold">CampoVivo</span>
+          </div>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-white/10 text-emerald-200 lg:hidden">Agricultor</span>
+        </div>
+
+        <nav class="p-3 flex lg:flex-col gap-1.5 overflow-x-auto">
+          <button onclick="switchFarmerTab('iot')" data-ftab="iot" class="ftab-btn flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium bg-white/15 text-white whitespace-nowrap transition">
+            <span>📊</span>
+            <span>Tablero IoT</span>
+          </button>
+          <button onclick="switchFarmerTab('accounting')" data-ftab="accounting" class="ftab-btn flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-emerald-100/80 hover:bg-white/10 whitespace-nowrap transition">
+            <span>💼</span>
+            <span>Contabilidad</span>
+          </button>
+          <button onclick="switchFarmerTab('inventory')" data-ftab="inventory" class="ftab-btn flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-emerald-100/80 hover:bg-white/10 whitespace-nowrap transition">
+            <span>📦</span>
+            <span>Inventario</span>
+          </button>
+          <button onclick="navigateTo('investor')" class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-emerald-100/80 hover:bg-white/10 whitespace-nowrap transition">
+            <span>📈</span>
+            <span>Inversionistas</span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="hidden lg:block p-4 m-3 rounded-xl bg-white/10 text-xs space-y-1">
+        <div class="font-semibold text-white" id="farmerSessionName">Jesús Celis</div>
+        <div class="text-emerald-200/80" id="farmerFarmBadge">Granja El Roble • Piedecuesta</div>
+        <div class="text-[11px] text-emerald-300 pt-1">● Sincronización Offline-First activa</div>
+      </div>
+    </aside>
+
+    <!-- Contenido Principal del Agricultor -->
+    <div class="flex-1 flex flex-col bg-campo-bg">
+      <!-- Topbar -->
+      <header class="no-print bg-campo-bg border-b border-campo-border px-6 py-3.5 flex items-center justify-between">
+        <div class="text-xs sm:text-sm text-campo-muted" id="currentDateLabel">Martes, 24 de noviembre de 2026</div>
+        <div class="flex items-center gap-3">
+          <button onclick="showToast('🔔', 'Revisa el tablero de telemetría para el estado de alertas y nodos ESP32.')" class="relative p-2 rounded-full hover:bg-[#EFECE3] transition" title="Notificaciones">
+            <span>🔔</span>
+            <span id="notifDot" class="hidden absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-600"></span>
+          </button>
+          <div class="w-9 h-9 rounded-full bg-campo-forest text-white text-xs font-semibold flex items-center justify-center" id="farmerAvatarInitials">JC</div>
+        </div>
+      </header>
+
+      <!-- SUB-VISTA A: TABLERO IoT -->
+      <div id="farmer-tab-iot" class="p-6 sm:p-8 space-y-6 max-w-6xl w-full mx-auto">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink">Tablero de telemetría</h1>
+            <p class="text-sm text-campo-muted mt-0.5" id="iotSubtitle">Lecturas en tiempo real de 5 sensores ESP32</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="refreshTelemetry(true)" class="inline-flex items-center gap-1.5 rounded-xl border border-campo-border bg-white hover:bg-[#F5F3EC] px-3.5 py-2 text-xs sm:text-sm font-medium text-campo-ink transition">
+              <span>↻</span>
+              <span>Actualizar</span>
+            </button>
+            <button onclick="simulateEsp32Packet(false)" class="rounded-xl bg-campo-leaf hover:bg-campo-forest text-white px-3.5 py-2 text-xs sm:text-sm font-medium transition">
+              + Simular Trama ESP32
+            </button>
+            <button onclick="simulateEsp32Packet(true)" class="rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 px-3.5 py-2 text-xs sm:text-sm font-medium transition">
+              ⚠ Probar Trama Corrupta
+            </button>
+          </div>
+        </div>
+
+        <!-- Banner de Alerta Temprana (se oculta automáticamente cuando no hay alertas) -->
+        <div id="iotAlertBanner" class="hidden rounded-xl bg-campo-alertBg border border-campo-alertBorder px-4 py-3 text-xs sm:text-sm text-campo-alertText flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span>⚠️</span>
+            <span id="iotAlertText"></span>
+          </div>
+          <button id="reconnectEsp32Btn" onclick="reconnectEsp32_05()" class="hidden shrink-0 underline font-semibold hover:opacity-80">Reconectar ESP32-05</button>
+        </div>
+
+        <!-- Simulador Interactivo Broker MQTT & Nodos ESP32 -->
+        <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-campo-border pb-3">
+            <div>
+              <h2 class="font-editorial text-xl text-campo-ink">Simulador Broker MQTT &amp; Nodos ESP32</h2>
+              <p class="text-xs text-campo-muted">Envía tramas de telemetría, prueba el búfer sin conexión o inyecta paquetes corruptos.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="mqttConnBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">● Broker MQTT Online</span>
+              <span id="mqttBufferBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">SD Local: 0 tramas</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label for="simNodeSelect" class="block text-xs font-medium text-campo-ink mb-1">Nodo ESP32</label>
+              <select id="simNodeSelect" onchange="updateMqttPreview()" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs font-medium">
+                <option value="ESP32-01">ESP32-01 • Lote A (Hortalizas)</option>
+                <option value="ESP32-02">ESP32-02 • Invernadero Norte</option>
+                <option value="ESP32-03">ESP32-03 • Parcela Café</option>
+                <option value="ESP32-04">ESP32-04 • Compostera Orgánica</option>
+                <option value="ESP32-05">ESP32-05 • Lote B (Riego)</option>
+              </select>
+            </div>
+            <div>
+              <label for="simHumidityInput" class="block text-xs font-medium text-campo-ink mb-1">Humedad suelo (%)</label>
+              <input id="simHumidityInput" type="number" min="-50" max="200" value="64" oninput="updateMqttPreview()" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label for="simTempInput" class="block text-xs font-medium text-campo-ink mb-1">Temperatura (°C)</label>
+              <input id="simTempInput" type="number" step="0.1" min="-1200" max="150" value="24.5" oninput="updateMqttPreview()" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs" />
+            </div>
+            <div class="flex gap-2">
+              <button type="button" onclick="sendCustomEsp32Frame()" class="flex-1 rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white px-3 py-2 text-xs font-semibold transition">
+                Transmitir JSON
+              </button>
+              <button type="button" id="toggleNetworkBtn" onclick="toggleRuralNetwork()" class="rounded-xl border border-campo-border bg-amber-50 hover:bg-amber-100 text-amber-900 px-3 py-2 text-xs font-semibold transition" title="Simular corte de red rural">
+                Cortar Red
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div class="rounded-xl bg-[#111814] text-emerald-200 p-3 text-[11px] font-mono overflow-x-auto">
+              <div class="text-emerald-400/80 mb-1">Topic: campovivo/santander/telemetria</div>
+              <code id="mqttPayloadPreview">{"nodo":"ESP32-01","humedad":64,"temp":24.5,"ip67":true}</code>
+            </div>
+            <div class="rounded-xl bg-[#FAF8F2] border border-campo-border p-3 text-[11px] font-mono max-h-28 overflow-y-auto space-y-1" id="mqttLogBox">
+              <div class="text-campo-muted">[Broker MQTT] Listo para recibir tramas de nodos ESP32...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Tarjetas KPI -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">TEMP. PROMEDIO</div>
+            <div class="font-editorial text-3xl sm:text-4xl text-campo-ink mt-2" id="kpiTemp">24.7 °C</div>
+            <div class="text-xs text-campo-muted mt-1.5">+1.2 °C vs ayer</div>
+          </div>
+
+          <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">HUMEDAD PROMEDIO</div>
+            <div class="font-editorial text-3xl sm:text-4xl text-campo-ink mt-2" id="kpiHumidity">61 %</div>
+            <div class="text-xs text-campo-leaf font-medium mt-1.5">Rango óptimo 55–75 %</div>
+          </div>
+
+          <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">SENSORES ACTIVOS</div>
+            <div class="font-editorial text-3xl sm:text-4xl text-campo-ink mt-2" id="kpiSensors">4 / 5</div>
+            <div class="text-xs text-red-600 font-medium mt-1.5" id="kpiSensorsSub">ESP32-05 sin conexión</div>
+          </div>
+
+          <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">LECTURAS HOY</div>
+            <div class="font-editorial text-3xl sm:text-4xl text-campo-ink mt-2" id="kpiReadings">1.152</div>
+            <div class="text-xs text-campo-muted mt-1.5">Cada 5 minutos</div>
+          </div>
+        </div>
+
+        <!-- Gráfico de Telemetría Últimas 24 Horas · Lote A -->
+        <div class="rounded-2xl bg-white border border-campo-border p-5 sm:p-6 shadow-2xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h2 class="font-editorial text-xl sm:text-2xl text-campo-ink">Últimas 24 horas · Lote A</h2>
+            <span class="text-xs text-campo-muted">Humedad relativa (%) y Temperatura (°C)</span>
+          </div>
+          <div class="h-64 sm:h-72 w-full">
+            <canvas id="telemetryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Estado de Nodos ESP32 -->
+        <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
+          <h3 class="font-editorial text-xl text-campo-ink mb-3">Estado de nodos en campo (IP67)</h3>
+          <div id="nodesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
+        </div>
+      </div>
+
+      <!-- SUB-VISTA B: CONTABILIDAD -->
+      <div id="farmer-tab-accounting" class="hidden p-6 sm:p-8 space-y-6 max-w-6xl w-full mx-auto">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink">Gestión financiera y contable</h1>
+            <p class="text-sm text-campo-muted mt-0.5">Balance general síncrono, registro de ingresos, egresos y nómina de jornaleros.</p>
+          </div>
+          <button onclick="exportAccountingReport()" class="rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white px-4 py-2.5 text-xs sm:text-sm font-medium transition">
+            📄 Exportar Reporte PDF
+          </button>
+        </div>
+
+        <!-- Resumen Financiero -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="rounded-2xl bg-white border border-campo-border p-5">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">INGRESOS ACUMULADOS</div>
+            <div class="font-editorial text-3xl text-emerald-700 mt-1.5" id="accIncome">$0</div>
+          </div>
+          <div class="rounded-2xl bg-white border border-campo-border p-5">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">EGRESOS Y NÓMINA</div>
+            <div class="font-editorial text-3xl text-red-700 mt-1.5" id="accExpense">$0</div>
+          </div>
+          <div class="rounded-2xl bg-white border border-campo-border p-5">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">BALANCE NETO ACTUAL</div>
+            <div class="font-editorial text-3xl text-campo-ink mt-1.5" id="accBalance">$0</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Formulario Nuevo Movimiento -->
+          <form id="accountingForm" onsubmit="addAccountingEntry(event)" class="rounded-2xl bg-white border border-campo-border p-5 space-y-4 h-fit">
+            <h2 class="font-editorial text-2xl text-campo-ink">Registrar movimiento</h2>
+            <div>
+              <label class="block text-xs font-medium text-campo-ink mb-1">Tipo de movimiento</label>
+              <select id="accType" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2.5 text-sm">
+                <option value="Ingreso">Ingreso</option>
+                <option value="Egreso">Egreso</option>
+                <option value="Nómina">Nómina (Jornaleros)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-campo-ink mb-1">Concepto / Descripción</label>
+              <input id="accConcept" type="text" required placeholder="Ej. Pago jornaleros cosecha tomate" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2.5 text-sm" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Monto (COP)</label>
+                <input id="accAmount" type="number" min="1" step="1" required placeholder="150000" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2.5 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Fecha</label>
+                <input id="accDate" type="date" required value="2026-11-24" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2.5 text-sm" />
+              </div>
+            </div>
+            <button type="submit" class="w-full rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white font-medium py-3 text-sm transition">
+              Guardar y actualizar balance
+            </button>
+          </form>
+
+          <!-- Tabla Historial Contable -->
+          <div class="lg:col-span-2 rounded-2xl bg-white border border-campo-border p-5 overflow-x-auto">
+            <h2 class="font-editorial text-2xl text-campo-ink mb-4">Historial de transacciones</h2>
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-campo-border text-xs uppercase text-campo-muted">
+                  <th class="py-2.5 pr-3">Fecha</th>
+                  <th class="py-2.5 px-3">Tipo</th>
+                  <th class="py-2.5 px-3">Concepto</th>
+                  <th class="py-2.5 pl-3 text-right">Monto</th>
+                </tr>
+              </thead>
+              <tbody id="accountingTableBody" class="divide-y divide-campo-border"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-VISTA C: INVENTARIO E INSUMOS -->
+      <div id="farmer-tab-inventory" class="hidden p-6 sm:p-8 space-y-6 max-w-6xl w-full mx-auto">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink">Inventario de cosechas e insumos</h1>
+            <p class="text-sm text-campo-muted mt-0.5">Sincronizado en tiempo real con la Tienda Online y alertas de stock crítico.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Formulario Nuevo Producto / Insumo -->
+          <form id="inventoryForm" onsubmit="addInventoryItem(event)" class="rounded-2xl bg-white border border-campo-border p-5 space-y-3.5 h-fit">
+            <h2 class="font-editorial text-2xl text-campo-ink">Nuevo lote o insumo</h2>
+            <div>
+              <label class="block text-xs font-medium text-campo-ink mb-1">Nombre del producto / insumo</label>
+              <input id="invName" type="text" required placeholder="Ej. Aguacate Hass orgánico" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2 text-sm" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Categoría</label>
+                <select id="invCategory" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-sm">
+                  <option value="Hortalizas">Hortalizas</option>
+                  <option value="Frutas">Frutas</option>
+                  <option value="Café">Café</option>
+                  <option value="Granja">Granja / Insumos</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Unidad</label>
+                <input id="invUnit" type="text" required value="kg" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2.5">
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Stock</label>
+                <input id="invStock" type="number" min="0" required value="30" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Mínimo</label>
+                <input id="invMinStock" type="number" min="1" required value="8" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-campo-ink mb-1">Precio</label>
+                <input id="invPrice" type="number" min="100" required value="5500" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-campo-ink pt-1">
+              <input id="invSellable" type="checkbox" checked class="rounded border-campo-border text-campo-leaf" />
+              <span>Publicar en Tienda Online para clientes</span>
+            </label>
+            <button type="submit" class="w-full rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white font-medium py-2.5 text-sm transition">
+              Agregar al inventario
+            </button>
+          </form>
+
+          <!-- Tabla de Inventario -->
+          <div class="lg:col-span-2 rounded-2xl bg-white border border-campo-border p-5 overflow-x-auto">
+            <h2 class="font-editorial text-2xl text-campo-ink mb-4">Existencias actuales</h2>
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-campo-border text-xs uppercase text-campo-muted">
+                  <th class="py-2.5 pr-3">Ítem</th>
+                  <th class="py-2.5 px-3">Granja</th>
+                  <th class="py-2.5 px-3">Stock</th>
+                  <th class="py-2.5 px-3">Estado</th>
+                  <th class="py-2.5 px-3 text-right">Precio</th>
+                  <th class="py-2.5 pl-3 text-right">Ajuste</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryTableBody" class="divide-y divide-campo-border"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- VISTA 3: TIENDA ONLINE DE PRODUCTOS ORGÁNICOS                          -->
+  <!-- ===================================================================== -->
+  <section id="view-store" class="hidden flex-1 min-h-[calc(100vh-36px)] bg-campo-bg">
+    <header class="no-print bg-campo-header/70 border-b border-campo-border px-6 sm:px-10 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="text-amber-600 text-xl">🌱</span>
+        <span class="font-editorial text-2xl font-semibold text-campo-forest">CampoVivo</span>
+      </div>
+
+      <nav class="flex items-center gap-6 text-sm font-medium text-campo-ink">
+        <button onclick="navigateTo('store')" class="text-campo-forest font-semibold">Tienda</button>
+        <button onclick="navigateTo('investor')" class="hover:text-campo-leaf transition">Granjas e Inversión</button>
+        <button onclick="navigateTo('farmer')" class="hover:text-campo-leaf transition">Panel Granja</button>
+        <button onclick="navigateTo('login')" class="rounded-full bg-campo-amber hover:bg-campo-amberHover text-campo-ink font-semibold px-5 py-2 transition shadow-2xs">
+          Ingresar
+        </button>
+      </nav>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-6 sm:px-10 py-8">
+      <div class="mb-6">
+        <h1 class="font-editorial text-4xl sm:text-5xl text-campo-ink">Tienda CampoVivo</h1>
+        <p class="text-sm sm:text-base text-campo-muted mt-1">Productos orgánicos cosechados en granjas agroecológicas de Santander.</p>
+      </div>
+
+      <!-- Filtros por Categoría y Granja -->
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div id="categoryFilters" class="flex flex-wrap items-center gap-2">
+          <button type="button" data-cat="Todos" onclick="selectCategory('Todos')" class="cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-campo-forest text-white transition">Todos</button>
+          <button type="button" data-cat="Hortalizas" onclick="selectCategory('Hortalizas')" class="cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white border border-campo-border text-campo-ink hover:bg-[#F3F1E8] transition">Hortalizas</button>
+          <button type="button" data-cat="Frutas" onclick="selectCategory('Frutas')" class="cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white border border-campo-border text-campo-ink hover:bg-[#F3F1E8] transition">Frutas</button>
+          <button type="button" data-cat="Café" onclick="selectCategory('Café')" class="cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white border border-campo-border text-campo-ink hover:bg-[#F3F1E8] transition">Café</button>
+          <button type="button" data-cat="Granja" onclick="selectCategory('Granja')" class="cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white border border-campo-border text-campo-ink hover:bg-[#F3F1E8] transition">Granja</button>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs">
+          <label for="storeFarmFilter" class="text-campo-muted font-medium">Granja:</label>
+          <select id="storeFarmFilter" onchange="renderStore()" class="rounded-xl border border-campo-border bg-white px-3 py-2 text-xs font-medium text-campo-ink">
+            <option value="ALL">Todas las granjas</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grid Productos + Carrito Lateral -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+        <div id="productGrid" class="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+
+        <aside class="lg:col-span-4 rounded-2xl bg-white border border-campo-border p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="font-editorial text-2xl text-campo-ink flex items-center gap-2">
+              <span>🛒</span>
+              <span>Tu carrito</span>
+            </h2>
+            <button type="button" onclick="clearCart()" class="text-xs text-campo-muted hover:text-red-600 underline">Vaciar</button>
+          </div>
+
+          <div id="cartItemsContainer" class="divide-y divide-campo-border min-h-[110px]"></div>
+
+          <!-- Cupón de Descuento -->
+          <div class="pt-2">
+            <div class="flex gap-2">
+              <input
+                id="couponInput"
+                type="text"
+                placeholder="🎟 DESCUENTO202610"
+                class="flex-1 rounded-xl border border-campo-border bg-campo-bg px-3.5 py-2 text-xs uppercase font-medium focus:outline-none focus:ring-2 focus:ring-campo-leaf"
+              />
+              <button type="button" onclick="applyCoupon()" class="rounded-xl bg-[#ECEAE0] hover:bg-[#E2DFD2] text-campo-ink font-semibold px-4 py-2 text-xs transition">
+                Aplicar
+              </button>
+            </div>
+            <p id="couponMessage" class="text-[11px] mt-1.5 text-campo-muted">Cupón demo activo: <span class="font-semibold text-campo-leaf">DESCUENTO202610</span> (10% off)</p>
+          </div>
+
+          <!-- Datos de Envío -->
+          <div class="space-y-2 pt-2 border-t border-campo-border">
+            <label class="block text-xs font-semibold text-campo-ink">Datos de entrega (Checkout)</label>
+            <input id="checkoutName" type="text" value="Karla Martínez" placeholder="Nombre del cliente" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs" />
+            <input id="checkoutAddress" type="text" value="Calle 45 #28-12, Bucaramanga" placeholder="Dirección de envío" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs" />
+          </div>
+
+          <!-- Totales -->
+          <div class="space-y-1.5 pt-3 border-t border-campo-border text-sm">
+            <div class="flex justify-between text-campo-muted">
+              <span>Subtotal</span>
+              <span id="cartSubtotal">$0</span>
+            </div>
+            <div class="flex justify-between text-emerald-700 font-medium">
+              <span>Descuento cupón</span>
+              <span id="cartDiscount">-$0</span>
+            </div>
+            <div class="flex justify-between text-campo-ink font-bold text-base pt-1.5 border-t border-campo-border">
+              <span>Total a pagar</span>
+              <span id="cartTotal">$0</span>
+            </div>
+          </div>
+
+          <button type="button" onclick="checkoutOrder()" class="w-full rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white font-semibold py-3 text-sm transition shadow-sm">
+            Finalizar compra y generar factura
+          </button>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- VISTA 4: PORTAL DE INVERSIONISTAS Y CATÁLOGO DE GRANJAS               -->
+  <!-- ===================================================================== -->
+  <section id="view-investor" class="hidden flex-1 min-h-[calc(100vh-36px)] bg-campo-bg">
+    <header class="no-print bg-campo-header/70 border-b border-campo-border px-6 sm:px-10 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="text-campo-leaf text-xl">🌱</span>
+        <span class="font-editorial text-2xl font-semibold text-campo-forest">CampoVivo • Inversionistas</span>
+      </div>
+      <nav class="flex items-center gap-5 text-sm font-medium text-campo-ink">
+        <button onclick="navigateTo('store')" class="hover:text-campo-leaf transition">Tienda</button>
+        <button onclick="navigateTo('farmer')" class="hover:text-campo-leaf transition">Panel Agricultor</button>
+        <button onclick="navigateTo('login')" class="rounded-full bg-campo-forest text-white px-4 py-1.5 text-xs font-semibold">Cambiar cuenta</button>
+      </nav>
+    </header>
+
+    <div class="max-w-6xl mx-auto px-6 sm:px-10 py-8 space-y-6">
+      <div>
+        <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink">Indicadores de inversión y granjas agroecológicas</h1>
+        <p class="text-sm text-campo-muted mt-1">Resumen ejecutivo de rendimiento proyectado y catálogo de granjas disponibles para invertir en Santander.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="rounded-2xl bg-white border border-campo-border p-5">
+          <div class="text-[11px] font-semibold uppercase text-campo-muted">INVERSIÓN INICIAL (CAPEX)</div>
+          <div class="font-editorial text-2xl sm:text-3xl text-campo-ink mt-1.5">$24.500.000</div>
+          <div class="text-xs text-campo-muted mt-1">Suscripción SaaS $2.4M/año</div>
+        </div>
+        <div class="rounded-2xl bg-white border border-campo-border p-5">
+          <div class="text-[11px] font-semibold uppercase text-campo-muted">VPN PROYECTADO (5 AÑOS)</div>
+          <div class="font-editorial text-2xl sm:text-3xl text-emerald-700 mt-1.5">$116.850.344</div>
+          <div class="text-xs text-campo-muted mt-1">Tasa de descuento 18%</div>
+        </div>
+        <div class="rounded-2xl bg-white border border-campo-border p-5">
+          <div class="text-[11px] font-semibold uppercase text-campo-muted">TIR ESTIMADA</div>
+          <div class="font-editorial text-2xl sm:text-3xl text-campo-ink mt-1.5">90,86 %</div>
+          <div class="text-xs text-emerald-700 font-medium mt-1">Escalamiento 5 → 35 granjas</div>
+        </div>
+        <div class="rounded-2xl bg-white border border-campo-border p-5">
+          <div class="text-[11px] font-semibold uppercase text-campo-muted">MI PORTAFOLIO ACTIVO</div>
+          <div class="font-editorial text-2xl sm:text-3xl text-campo-ink mt-1.5" id="investorPortfolioTotal">$0</div>
+          <div class="text-xs text-campo-muted mt-1" id="investorPortfolioCount">0 inversiones registradas</div>
+        </div>
+      </div>
+
+      <!-- Catálogo de Granjas para Invertir -->
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-editorial text-2xl sm:text-3xl text-campo-ink">Catálogo de granjas disponibles para inversión</h2>
+          <span class="text-xs text-campo-muted">Datos operativos y de telemetría sin exposición de nómina interna</span>
+        </div>
+        <div id="investorFarmsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </div>
+
+      <!-- Tabla Proyección Financiera 5 Años -->
+      <div class="rounded-2xl bg-white border border-campo-border p-6 overflow-x-auto">
+        <h2 class="font-editorial text-2xl text-campo-ink mb-4">Proyección de flujo de fondos (5 años)</h2>
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-campo-border text-xs uppercase text-campo-muted">
+              <th class="py-2.5 pr-3">Año</th>
+              <th class="py-2.5 px-3">Granjas Vinculadas</th>
+              <th class="py-2.5 px-3">Ingresos Brutos</th>
+              <th class="py-2.5 px-3">OPEX + Depreciación</th>
+              <th class="py-2.5 pl-3 text-right">Flujo Neto</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-campo-border">
+            <tr><td class="py-2.5 pr-3 font-medium">Año 1</td><td class="py-2.5 px-3">5 granjas</td><td class="py-2.5 px-3">$12.000.000</td><td class="py-2.5 px-3">$4.652.000</td><td class="py-2.5 pl-3 text-right font-semibold text-emerald-700">$7.500.000</td></tr>
+            <tr><td class="py-2.5 pr-3 font-medium">Año 2</td><td class="py-2.5 px-3">12 granjas</td><td class="py-2.5 px-3">$28.800.000</td><td class="py-2.5 px-3">$4.652.000</td><td class="py-2.5 pl-3 text-right font-semibold text-emerald-700">$23.500.000</td></tr>
+            <tr><td class="py-2.5 pr-3 font-medium">Año 3</td><td class="py-2.5 px-3">20 granjas</td><td class="py-2.5 px-3">$48.000.000</td><td class="py-2.5 px-3">$4.652.000</td><td class="py-2.5 pl-3 text-right font-semibold text-emerald-700">$43.500.000</td></tr>
+            <tr><td class="py-2.5 pr-3 font-medium">Año 4</td><td class="py-2.5 px-3">28 granjas</td><td class="py-2.5 px-3">$67.200.000</td><td class="py-2.5 px-3">$4.652.000</td><td class="py-2.5 pl-3 text-right font-semibold text-emerald-700">$62.700.000</td></tr>
+            <tr><td class="py-2.5 pr-3 font-medium">Año 5</td><td class="py-2.5 px-3">35 granjas</td><td class="py-2.5 px-3">$84.000.000</td><td class="py-2.5 px-3">$4.652.000</td><td class="py-2.5 pl-3 text-right font-semibold text-emerald-700">$79.500.000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL DE FACTURA DIGITAL                                              -->
+  <!-- ===================================================================== -->
+  <div id="invoiceModal" class="fixed inset-0 z-50 hidden bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-campo-border space-y-4">
+      <div class="flex items-start justify-between border-b border-campo-border pb-4">
+        <div>
+          <div class="font-editorial text-2xl font-semibold text-campo-forest">🌱 CampoVivo — Factura Digital</div>
+          <div class="text-xs text-campo-muted mt-0.5" id="invCode">Factura #CV-102 • Aprobada</div>
+        </div>
+        <button onclick="closeInvoiceModal()" class="no-print text-campo-muted hover:text-campo-ink text-lg font-bold">✕</button>
+      </div>
+
+      <div class="text-xs space-y-1 text-campo-ink" id="invCustomerInfo"></div>
+      <div class="border-t border-b border-campo-border py-3 space-y-2 text-xs" id="invItemsList"></div>
+      <div class="space-y-1 text-sm" id="invTotalsBox"></div>
+
+      <div class="no-print flex items-center justify-end gap-2.5 pt-2">
+        <button onclick="window.print()" class="rounded-xl border border-campo-border px-4 py-2 text-xs font-semibold hover:bg-campo-bg transition">
+          🖨 Imprimir / Guardar PDF
+        </button>
+        <button onclick="closeInvoiceModal()" class="rounded-xl bg-campo-forest text-white px-4 py-2 text-xs font-semibold hover:bg-campo-forestHover transition">
+          Listo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- LÓGICA DE APLICACIÓN, ESTADO Y SINCRONIZACIÓN CON SUPABASE            -->
+  <!-- ===================================================================== -->
+  <script>
+    const SUPABASE_URL = 'https://fkknusrknzqnmbmjlcvj.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_J1qRuEzizZVuxti5yv2G5A_2QSE60eA';
+
+    let supabaseClient = null;
+    const isSupabaseConfigured =
+      SUPABASE_URL.startsWith('https://') &&
+      !SUPABASE_URL.includes('PEGA_AQUI') &&
+      SUPABASE_ANON_KEY.length > 20 &&
+      !SUPABASE_ANON_KEY.includes('PEGA_AQUI');
+
+    if (isSupabaseConfigured && window.supabase) {
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch (err) {
+        console.warn('No se pudo inicializar Supabase client:', err);
+      }
+    }
+
+    const STORAGE_KEY = 'campovivo_prototype_v1_state';
+    const COUPON_CODE = 'DESCUENTO202610';
+    const COUPON_DISCOUNT_RATE = 0.10;
+
+    const DEFAULT_STATE = {
+      currentView: 'login',
+      authMode: 'login',
+      selectedLoginRole: 'Agricultor',
+      selectedRegisterRole: 'Agricultor',
+      failedAttempts: 0,
+      lockedOut: false,
+      activeUser: {
+        name: 'Jesús Celis',
+        email: 'agricultor@campovivo.co',
+        role: 'Agricultor',
+        farmName: 'Granja El Roble'
+      },
+      users: [
+        { name: 'Jesús Celis', email: 'agricultor@campovivo.co', password: '123', role: 'Agricultor', farmName: 'Granja El Roble' },
+        { name: 'Karla Martínez', email: 'karla.martinez@gmail.com', password: '123', role: 'Cliente', farmName: null },
+        { name: 'Inversor Santander', email: 'inversor@campovivo.co', password: '123', role: 'Inversionista', farmName: null }
+      ],
+      farms: [
+        {
+          id: 1,
+          name: 'Granja El Roble',
+          farmerName: 'Jesús Celis',
+          municipality: 'Piedecuesta',
+          area: '4.2 ha',
+          mainCrop: 'Hortalizas y Café',
+          iotEfficiency: 97.2,
+          roiEstimate: 24.5,
+          fundingGoal: 25000000,
+          fundingRaised: 14500000
+        },
+        {
+          id: 2,
+          name: 'Finca Altos de Mesa',
+          farmerName: 'Mariana Gómez',
+          municipality: 'Los Santos',
+          area: '6.0 ha',
+          mainCrop: 'Café Especial y Aguacate',
+          iotEfficiency: 95.8,
+          roiEstimate: 22.8,
+          fundingGoal: 30000000,
+          fundingRaised: 19200000
+        },
+        {
+          id: 3,
+          name: 'Parcela La Pradera',
+          farmerName: 'Carlos Ardila',
+          municipality: 'Floridablanca',
+          area: '2.8 ha',
+          mainCrop: 'Hojas Verdes y Cítricos',
+          iotEfficiency: 98.1,
+          roiEstimate: 21.4,
+          fundingGoal: 15000000,
+          fundingRaised: 6800000
+        }
+      ],
+      investments: [],
+      farmerTab: 'iot',
+      selectedCategory: 'Todos',
+      telemetry: {
+        avgTemp: 24.7,
+        avgHumidity: 61,
+        readingsToday: 1152,
+        networkOnline: true,
+        offlineBuffer: [],
+        nodes: [
+          { id: 'ESP32-01', zone: 'Lote A · Hortalizas', status: 'Online', temp: 23.8, hum: 66 },
+          { id: 'ESP32-02', zone: 'Invernadero Norte', status: 'Alerta', temp: 31.8, hum: 39 },
+          { id: 'ESP32-03', zone: 'Parcela Café', status: 'Online', temp: 21.4, hum: 71 },
+          { id: 'ESP32-04', zone: 'Compostera Orgánica', status: 'Online', temp: 25.1, hum: 62 },
+          { id: 'ESP32-05', zone: 'Lote B · Riego', status: 'Offline', temp: 21.4, hum: 58 }
+        ],
+        historyLabels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Ahora'],
+        historyHumidity: [83, 86, 76, 54, 51, 66, 82],
+        historyTemp: [19.5, 18.8, 22.4, 29.6, 31.2, 25.4, 24.7]
+      },
+      accounting: [
+        { id: 1, date: '2026-10-18', concept: 'Venta directa mercado campesino Bucaramanga', category: 'Ingreso', amount: 1450000 },
+        { id: 2, date: '2026-10-19', concept: 'Jornales siembra y deshierbe Lote A', category: 'Nómina', amount: 520000 },
+        { id: 3, date: '2026-10-20', concept: 'Mantenimiento carcasas IP67 y tubería riego', category: 'Egreso', amount: 310000 }
+      ],
+      products: [
+        { id: 1, farmId: 1, farmName: 'Granja El Roble', municipality: 'Piedecuesta', name: 'Tomate chonto orgánico', category: 'Hortalizas', unit: 'kg', stock: 42, minStock: 10, price: 6500, emoji: '🍅', bg: '#E8EBD8', sellable: true },
+        { id: 2, farmId: 1, farmName: 'Granja El Roble', municipality: 'Piedecuesta', name: 'Lechuga crespa', category: 'Hortalizas', unit: 'und', stock: 60, minStock: 15, price: 3200, emoji: '🥬', bg: '#DCE5DF', sellable: true },
+        { id: 3, farmId: 2, farmName: 'Finca Altos de Mesa', municipality: 'Los Santos', name: 'Café de origen Santander', category: 'Café', unit: '500 g', stock: 25, minStock: 6, price: 28000, emoji: '☕', bg: '#E6DFEC', sellable: true },
+        { id: 4, farmId: 3, farmName: 'Parcela La Pradera', municipality: 'Floridablanca', name: 'Naranja tangelo orgánica', category: 'Frutas', unit: 'kg', stock: 38, minStock: 10, price: 4200, emoji: '🍊', bg: '#FBEAD2', sellable: true },
+        { id: 5, farmId: 1, farmName: 'Granja El Roble', municipality: 'Piedecuesta', name: 'Compost orgánico maduro', category: 'Granja', unit: 'bulto 20kg', stock: 4, minStock: 8, price: 14000, emoji: '🌿', bg: '#EAE3D2', sellable: false }
+      ],
+      cart: [
+        { productId: 1, qty: 2 },
+        { productId: 3, qty: 1 }
+      ],
+      appliedCoupon: null,
+      lastInvoice: null
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(DEFAULT_STATE);
+        const parsed = JSON.parse(raw);
+        return {
+          ...structuredClone(DEFAULT_STATE),
+          ...parsed,
+          telemetry: {
+            ...structuredClone(DEFAULT_STATE.telemetry),
+            ...(parsed.telemetry || {})
+          }
+        };
+      } catch (e) {
+        console.warn('Error cargando estado local, usando estado por defecto:', e);
+        return structuredClone(DEFAULT_STATE);
+      }
+    }
+
+    let state = loadState();
+    let telemetryChartInstance = null;
+    let farmPickerMap = null;
+    let farmPickerMarker = null;
+    let santanderMunicipalitiesLayer = null;
+    let santanderVeredasLayer = null;
+
+    const SANTANDER_PLACES = [
+      { name: 'Bucaramanga', type: 'Municipio', municipio: 'Bucaramanga', lat: 7.1193, lng: -73.1227 },
+      { name: 'Floridablanca', type: 'Municipio', municipio: 'Floridablanca', lat: 7.0622, lng: -73.0864 },
+      { name: 'Girón', type: 'Municipio', municipio: 'Girón', lat: 7.0678, lng: -73.1704 },
+      { name: 'Piedecuesta', type: 'Municipio', municipio: 'Piedecuesta', lat: 6.9875, lng: -73.0504 },
+      { name: 'Lebrija', type: 'Municipio', municipio: 'Lebrija', lat: 7.1136, lng: -73.2189 },
+      { name: 'Rionegro', type: 'Municipio', municipio: 'Rionegro', lat: 7.5967, lng: -73.1492 },
+      { name: 'Sabana de Torres', type: 'Municipio', municipio: 'Sabana de Torres', lat: 7.3922, lng: -73.5017 },
+      { name: 'Puerto Wilches', type: 'Municipio', municipio: 'Puerto Wilches', lat: 7.3458, lng: -73.8969 },
+      { name: 'Barrancabermeja', type: 'Municipio', municipio: 'Barrancabermeja', lat: 7.0653, lng: -73.8547 },
+      { name: 'San Gil', type: 'Municipio', municipio: 'San Gil', lat: 6.5567, lng: -73.1336 },
+      { name: 'Barichara', type: 'Municipio', municipio: 'Barichara', lat: 6.6347, lng: -73.2244 },
+      { name: 'Curití', type: 'Municipio', municipio: 'Curití', lat: 6.6061, lng: -73.0711 },
+      { name: 'Aratoca', type: 'Municipio', municipio: 'Aratoca', lat: 6.7014, lng: -73.0169 },
+      { name: 'Villanueva', type: 'Municipio', municipio: 'Villanueva', lat: 6.6703, lng: -73.1806 },
+      { name: 'Pinchote', type: 'Municipio', municipio: 'Pinchote', lat: 6.5267, lng: -73.1722 },
+      { name: 'Páramo', type: 'Municipio', municipio: 'Páramo', lat: 6.4581, lng: -73.1536 },
+      { name: 'Valle de San José', type: 'Municipio', municipio: 'Valle de San José', lat: 6.4458, lng: -73.1339 },
+      { name: 'Charalá', type: 'Municipio', municipio: 'Charalá', lat: 6.2869, lng: -73.1475 },
+      { name: 'Ocamonte', type: 'Municipio', municipio: 'Ocamonte', lat: 6.3164, lng: -73.0994 },
+      { name: 'Socorro', type: 'Municipio', municipio: 'Socorro', lat: 6.4667, lng: -73.2611 },
+      { name: 'Simacota', type: 'Municipio', municipio: 'Simacota', lat: 6.7436, lng: -73.5917 },
+      { name: 'Hato', type: 'Municipio', municipio: 'Hato', lat: 6.5972, lng: -73.3267 },
+      { name: 'Palmas del Socorro', type: 'Municipio', municipio: 'Palmas del Socorro', lat: 6.4178, lng: -73.2719 },
+      { name: 'Guadalupe', type: 'Municipio', municipio: 'Guadalupe', lat: 6.2508, lng: -73.4103 },
+      { name: 'Suaita', type: 'Municipio', municipio: 'Suaita', lat: 6.1358, lng: -73.4281 },
+      { name: 'Barbosa', type: 'Municipio', municipio: 'Barbosa', lat: 5.9328, lng: -73.6214 },
+      { name: 'Puente Nacional', type: 'Municipio', municipio: 'Puente Nacional', lat: 5.8753, lng: -73.6719 },
+      { name: 'Vélez', type: 'Municipio', municipio: 'Vélez', lat: 6.0144, lng: -73.6739 },
+      { name: 'Chipatá', type: 'Municipio', municipio: 'Chipatá', lat: 6.0653, lng: -73.6194 },
+      { name: 'Guavatá', type: 'Municipio', municipio: 'Guavatá', lat: 5.9739, lng: -73.6131 },
+      { name: 'Güepsa', type: 'Municipio', municipio: 'Güepsa', lat: 5.9614, lng: -73.5989 },
+      { name: 'Jesús María', type: 'Municipio', municipio: 'Jesús María', lat: 5.8767, lng: -73.7975 },
+      { name: 'La Belleza', type: 'Municipio', municipio: 'La Belleza', lat: 5.8689, lng: -73.9497 },
+      { name: 'Landázuri', type: 'Municipio', municipio: 'Landázuri', lat: 6.2242, lng: -73.8167 },
+      { name: 'El Carmen de Chucurí', type: 'Municipio', municipio: 'El Carmen de Chucurí', lat: 6.6975, lng: -73.5042 },
+      { name: 'San Vicente de Chucurí', type: 'Municipio', municipio: 'San Vicente de Chucurí', lat: 6.8833, lng: -73.4167 },
+      { name: 'Betulia', type: 'Municipio', municipio: 'Betulia', lat: 6.9125, lng: -73.2750 },
+      { name: 'Zapatoca', type: 'Municipio', municipio: 'Zapatoca', lat: 6.8147, lng: -73.2731 },
+      { name: 'Galán', type: 'Municipio', municipio: 'Galán', lat: 6.6383, lng: -73.2939 },
+      { name: 'Hoya Grande', type: 'Municipio', municipio: 'Hoya Grande', lat: 6.6250, lng: -73.3200 },
+      { name: 'Palmar', type: 'Municipio', municipio: 'Palmar', lat: 6.5356, lng: -73.2661 },
+      { name: 'Cabrera', type: 'Municipio', municipio: 'Cabrera', lat: 6.5975, lng: -73.2414 },
+      { name: 'Los Santos', type: 'Municipio', municipio: 'Los Santos', lat: 6.7489, lng: -73.1167 },
+      { name: 'Jordán', type: 'Municipio', municipio: 'Jordán', lat: 6.7419, lng: -73.1003 },
+      { name: 'Cepita', type: 'Municipio', municipio: 'Cepita', lat: 6.7672, lng: -72.9775 },
+      { name: 'Málaga', type: 'Municipio', municipio: 'Málaga', lat: 6.6989, lng: -72.7322 },
+      { name: 'Concepción', type: 'Municipio', municipio: 'Concepción', lat: 6.7744, lng: -72.6947 },
+      { name: 'Cerrito', type: 'Municipio', municipio: 'Cerrito', lat: 6.8439, lng: -72.6956 },
+      { name: 'Carcasí', type: 'Municipio', municipio: 'Carcasí', lat: 6.6392, lng: -72.6331 },
+      { name: 'San José de Miranda', type: 'Municipio', municipio: 'San José de Miranda', lat: 6.6525, lng: -72.7114 },
+      { name: 'Molagavita', type: 'Municipio', municipio: 'Molagavita', lat: 6.6789, lng: -72.8286 },
+      { name: 'Enciso', type: 'Municipio', municipio: 'Enciso', lat: 6.6247, lng: -72.7611 },
+      { name: 'Capitanejo', type: 'Municipio', municipio: 'Capitanejo', lat: 6.5306, lng: -72.6967 },
+      { name: 'Macaravita', type: 'Municipio', municipio: 'Macaravita', lat: 6.5656, lng: -72.5872 },
+      { name: 'Guaca', type: 'Municipio', municipio: 'Guaca', lat: 6.8542, lng: -72.8669 },
+      { name: 'San Andrés', type: 'Municipio', municipio: 'San Andrés', lat: 6.8125, lng: -72.8514 },
+      { name: 'Tona', type: 'Municipio', municipio: 'Tona', lat: 7.2044, lng: -72.9689 },
+      { name: 'California', type: 'Municipio', municipio: 'California', lat: 7.3506, lng: -72.9394 },
+      { name: 'Vetas', type: 'Municipio', municipio: 'Vetas', lat: 7.3264, lng: -72.8783 },
+      { name: 'Charta', type: 'Municipio', municipio: 'Charta', lat: 7.2817, lng: -72.9875 },
+      { name: 'Matanza', type: 'Municipio', municipio: 'Matanza', lat: 7.3236, lng: -73.0250 },
+      { name: 'Suratá', type: 'Municipio', municipio: 'Suratá', lat: 7.3728, lng: -72.9964 },
+      { name: 'Vereda Ruitoque Bajo', type: 'Vereda', municipio: 'Floridablanca', lat: 7.0435, lng: -73.0660 },
+      { name: 'Vereda Helechales', type: 'Vereda', municipio: 'Floridablanca', lat: 7.0320, lng: -73.0480 },
+      { name: 'Vereda Santa Bárbara', type: 'Vereda', municipio: 'Piedecuesta', lat: 6.9760, lng: -73.0120 },
+      { name: 'Vereda Sevilla', type: 'Vereda', municipio: 'Piedecuesta', lat: 6.9490, lng: -73.0450 },
+      { name: 'Vereda Chocoa', type: 'Vereda', municipio: 'Girón', lat: 7.0520, lng: -73.1950 },
+      { name: 'Vereda Pantano', type: 'Vereda', municipio: 'Girón', lat: 7.0290, lng: -73.2120 },
+      { name: 'Vereda El Mortiño', type: 'Vereda', municipio: 'Los Santos', lat: 6.7580, lng: -73.1410 },
+      { name: 'Vereda Tabacal', type: 'Vereda', municipio: 'Los Santos', lat: 6.7310, lng: -73.0920 },
+      { name: 'Vereda Butaregua', type: 'Vereda', municipio: 'Barichara', lat: 6.6510, lng: -73.2490 },
+      { name: 'Vereda Guane', type: 'Vereda', municipio: 'Barichara', lat: 6.6050, lng: -73.2710 },
+      { name: 'Vereda Ojo de Agua', type: 'Vereda', municipio: 'San Gil', lat: 6.5390, lng: -73.1120 },
+      { name: 'Vereda Versalles', type: 'Vereda', municipio: 'San Gil', lat: 6.5820, lng: -73.1560 },
+      { name: 'Vereda La Laja', type: 'Vereda', municipio: 'Zapatoca', lat: 6.8350, lng: -73.2980 },
+      { name: 'Vereda San Pablo', type: 'Vereda', municipio: 'San Vicente de Chucurí', lat: 6.9050, lng: -73.4410 },
+      { name: 'Vereda Berlín', type: 'Vereda', municipio: 'Tona', lat: 7.1890, lng: -72.8890 }
+    ];
+
+    function normalizePlaceText(str) {
+      return (str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+    }
+
+    function getCoordinatesForMunicipality(municipalityText) {
+      const normalized = normalizePlaceText(municipalityText);
+      if (!normalized) return 'POINT(7.1193 -73.1227)';
+
+      const veredaMatch = SANTANDER_PLACES.find(p =>
+        p.type === 'Vereda' && normalizePlaceText(p.name).includes(normalized)
+      );
+      if (veredaMatch) {
+        return `POINT(${veredaMatch.lat.toFixed(4)} ${veredaMatch.lng.toFixed(4)})`;
+      }
+
+      const muniMatch = SANTANDER_PLACES.find(p =>
+        p.type === 'Municipio' && (normalizePlaceText(p.name).includes(normalized) || normalized.includes(normalizePlaceText(p.name)))
+      );
+      if (muniMatch) {
+        return `POINT(${muniMatch.lat.toFixed(4)} ${muniMatch.lng.toFixed(4)})`;
+      }
+
+      return 'POINT(7.1193 -73.1227)';
+    }
+
+    function filterAndFocusSantanderPlace() {
+      const input = document.getElementById('farmPlaceSearch');
+      const box = document.getElementById('farmPlaceSuggestions');
+      if (!input || !box) return;
+
+      const q = normalizePlaceText(input.value);
+      if (!q) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+
+      const matches = SANTANDER_PLACES.filter(p =>
+        normalizePlaceText(p.name).includes(q) || normalizePlaceText(p.municipio).includes(q)
+      ).slice(0, 6);
+
+      if (matches.length === 0) {
+        box.classList.remove('hidden');
+        box.innerHTML = `<div class="px-3 py-2 text-campo-muted">Sin coincidencias en Santander para "${input.value}".</div>`;
+        return;
+      }
+
+      box.classList.remove('hidden');
+      box.innerHTML = matches.map((m, idx) => `
+        <button
+          type="button"
+          onclick="selectSantanderPlaceByIndex(${idx}, '${encodeURIComponent(m.name)}')"
+          class="w-full text-left px-3 py-2 hover:bg-emerald-50 flex items-center justify-between gap-2 transition"
+        >
+          <span class="font-medium text-campo-ink">${m.name}</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full ${m.type === 'Vereda' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}">${m.type} · ${m.municipio}</span>
+        </button>
+      `).join('');
+    }
+
+    function selectSantanderPlaceByIndex(_idx, encodedName) {
+      const targetName = decodeURIComponent(encodedName);
+      const place = SANTANDER_PLACES.find(p => p.name === targetName);
+      if (!place) return;
+
+      const muniInput = document.getElementById('regMunicipality');
+      const searchInput = document.getElementById('farmPlaceSearch');
+      const box = document.getElementById('farmPlaceSuggestions');
+      if (muniInput && place.municipio) muniInput.value = place.municipio;
+      if (searchInput) searchInput.value = place.name;
+      if (box) box.classList.add('hidden');
+
+      const zoom = place.type === 'Vereda' ? 14 : 12;
+      setGpsPoint(
+        place.lat,
+        place.lng,
+        `${place.type}: ${place.name} (${place.municipio}, Santander) — POINT(${place.lat.toFixed(4)} ${place.lng.toFixed(4)}).`,
+        zoom
+      );
+    }
+
+    function focusSearchedSantanderPlace() {
+      const input = document.getElementById('farmPlaceSearch');
+      const q = normalizePlaceText(input?.value);
+      if (!q) return;
+      const match = SANTANDER_PLACES.find(p =>
+        normalizePlaceText(p.name).includes(q) || normalizePlaceText(p.municipio).includes(q)
+      );
+      if (match) {
+        selectSantanderPlaceByIndex(0, encodeURIComponent(match.name));
+      } else {
+        showToast('🔎', 'No se encontró ese lugar en Santander; puedes hacer clic directo en el mapa.');
+      }
+    }
+
+    function updatePlaceVisibilityByZoom() {
+      if (!farmPickerMap || !santanderMunicipalitiesLayer || !santanderVeredasLayer) return;
+      const z = farmPickerMap.getZoom();
+      const hint = document.getElementById('farmMapZoomHint');
+
+      if (!farmPickerMap.hasLayer(santanderMunicipalitiesLayer)) {
+        farmPickerMap.addLayer(santanderMunicipalitiesLayer);
+      }
+
+      if (z >= 12) {
+        if (!farmPickerMap.hasLayer(santanderVeredasLayer)) {
+          farmPickerMap.addLayer(santanderVeredasLayer);
+        }
+        if (hint) hint.textContent = `Zoom ${z}: mostrando municipios y veredas de Santander.`;
+      } else {
+        if (farmPickerMap.hasLayer(santanderVeredasLayer)) {
+          farmPickerMap.removeLayer(santanderVeredasLayer);
+        }
+        if (hint) hint.textContent = `Zoom ${z}: acercarse a zoom ≥ 12 para veredas (o usa el buscador).`;
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn('Error guardando estado local:', e);
+      }
+    }
+
+    function updateDbBadge(text, isOnline = false) {
+      const badge = document.getElementById('dbStatusBadge');
+      if (!badge) return;
+      badge.textContent = text;
+      badge.className = isOnline
+        ? 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-[11px] font-medium'
+        : 'px-2 py-0.5 rounded-full bg-white/10 text-emerald-100 text-[11px]';
+    }
+
+    async function syncFromSupabaseIfConfigured() {
+      if (!supabaseClient) {
+        updateDbBadge('Modo Local (localStorage)', false);
+        return;
+      }
+      updateDbBadge('Conectando Supabase...', false);
+      try {
+        const [farmsRes, prodRes, finRes, lectRes, invRes] = await Promise.all([
+          supabaseClient.from('granja').select('*').order('id', { ascending: true }),
+          supabaseClient.from('producto').select('*').order('id', { ascending: true }),
+          supabaseClient.from('registro_financiero').select('*').order('id', { ascending: true }),
+          supabaseClient.from('lectura_telemetria').select('*').order('id', { ascending: false }).limit(20),
+          supabaseClient.from('inversion_granja').select('*').order('id', { ascending: true })
+        ]);
+
+        if (farmsRes.data && farmsRes.data.length > 0) {
+          state.farms = farmsRes.data.map(f => ({
+            id: f.id,
+            name: f.nombre,
+            farmerName: state.activeUser?.name || 'Productor CampoVivo',
+            municipality: f.municipio || 'Santander',
+            area: `${f.tamano || 3} ha`,
+            mainCrop: 'Cultivo Agroecológico',
+            iotEfficiency: Number(f.eficiencia_iot || 96.5),
+            roiEstimate: Number(f.roi_estimado || 22.0),
+            fundingGoal: Number(f.meta_inversion || 20000000),
+            fundingRaised: Number(f.recaudado_inversion || 0)
+          }));
+        }
+
+        if (prodRes.data && prodRes.data.length > 0) {
+          const farmMap = new Map(state.farms.map(f => [f.id, f]));
+          state.products = prodRes.data.map(p => {
+            const farm = farmMap.get(p.granja_id) || state.farms[0];
+            return {
+              id: p.id,
+              farmId: p.granja_id,
+              farmName: farm ? farm.name : 'Granja CampoVivo',
+              municipality: farm ? farm.municipality : 'Santander',
+              name: p.nombre,
+              category: p.categoria || 'Hortalizas',
+              unit: p.unidad_medida || 'kg',
+              stock: Number(p.stock || 0),
+              minStock: Number(p.stock_minimo || 5),
+              price: Number(p.precio || 0),
+              emoji: p.emoji || '🌱',
+              bg: p.bg || '#E8EBD8',
+              sellable: p.vendible !== false
+            };
+          });
+        }
+
+        if (finRes.data && finRes.data.length > 0) {
+          state.accounting = finRes.data.map(r => ({
+            id: r.id,
+            date: r.fecha_transaccion,
+            concept: r.descripcion,
+            category: r.tipo_movimiento,
+            amount: Number(r.monto || 0)
+          }));
+        }
+
+        if (lectRes.data && lectRes.data.length > 0) {
+          const latest = lectRes.data[0];
+          if (latest.temperatura != null) state.telemetry.avgTemp = Number(latest.temperatura);
+          if (latest.humedad != null) state.telemetry.avgHumidity = Number(latest.humedad);
+          state.telemetry.readingsToday = Math.max(state.telemetry.readingsToday, 1152 + lectRes.data.length);
+        }
+
+        if (invRes.data && invRes.data.length > 0) {
+          const farmMap = new Map(state.farms.map(f => [f.id, f]));
+          state.investments = invRes.data.map(i => ({
+            id: i.id,
+            farmId: i.granja_id,
+            farmName: farmMap.get(i.granja_id)?.name || `Granja #${i.granja_id}`,
+            amount: Number(i.monto || 0),
+            projectedReturn: Number(i.retorno_estimado || 0)
+          }));
+        }
+
+        saveState();
+        updateDbBadge('Supabase Conectado ✓', true);
+        renderCurrentView();
+      } catch (err) {
+        console.warn('Error leyendo desde Supabase, usando caché local:', err);
+        updateDbBadge('Supabase Fallback (Local)', false);
+      }
+    }
+
+    async function pushAccountingToSupabase(entry) {
+      if (!supabaseClient) return;
+      try {
+        const farmId = state.farms[0]?.id;
+        if (!farmId) return;
+        await supabaseClient.from('registro_financiero').insert({
+          tipo_movimiento: entry.category,
+          fecha_transaccion: entry.date,
+          descripcion: entry.concept,
+          monto: entry.amount,
+          granja_id: farmId
+        });
+      } catch (e) {
+        console.warn('Error insertando movimiento en Supabase:', e);
+      }
+    }
+
+    async function pushProductToSupabase(item) {
+      if (!supabaseClient) return;
+      try {
+        const farmId = item.farmId || state.farms[0]?.id;
+        if (!farmId) return;
+        await supabaseClient.from('producto').insert({
+          nombre: item.name,
+          descripcion: `${item.name} — Producción agroecológica en ${item.municipality || 'Santander'}.`,
+          categoria: item.category,
+          precio: item.price,
+          stock: item.stock,
+          stock_minimo: item.minStock,
+          unidad_medida: item.unit,
+          emoji: item.emoji,
+          bg: item.bg,
+          vendible: item.sellable,
+          granja_id: farmId
+        });
+      } catch (e) {
+        console.warn('Error insertando producto en Supabase:', e);
+      }
+    }
+
+    async function pushTelemetryToSupabase(nodeId, hum, temp) {
+      if (!supabaseClient) return;
+      try {
+        const { data: sensors } = await supabaseClient.from('sensor').select('id').limit(1);
+        const sensorId = sensors && sensors[0] ? sensors[0].id : null;
+        if (!sensorId) return;
+        await supabaseClient.from('lectura_telemetria').insert({
+          valor_medido: Math.round(hum),
+          humedad: hum,
+          temperatura: temp,
+          dispositivo_ref: nodeId,
+          fec_lectura: new Date().toISOString().slice(0, 10),
+          sensor_id: sensorId
+        });
+      } catch (e) {
+        console.warn('Error insertando telemetría en Supabase:', e);
+      }
+    }
+
+    async function pushInvestmentToSupabase(farmId, amount, projectedReturn) {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient.from('inversion_granja').insert({
+          granja_id: farmId,
+          monto: amount,
+          retorno_estimado: projectedReturn,
+          fecha_registro: new Date().toISOString().slice(0, 10)
+        });
+        const farm = state.farms.find(f => f.id === farmId);
+        if (farm) {
+          await supabaseClient.from('granja').update({
+            recaudado_inversion: farm.fundingRaised
+          }).eq('id', farmId);
+        }
+      } catch (e) {
+        console.warn('Error registrando inversión en Supabase:', e);
+      }
+    }
+
+    async function pushRegistrationToSupabase({ name, email, phone, documentId, role, createdFarm, createdProduct }) {
+      if (!supabaseClient) return;
+      try {
+        const dbRole = role === 'Agricultor' ? 'Administrador' : role;
+        const cleanPhone = (phone || '3150000000').slice(0, 13);
+        const cleanDocument = (documentId || '1000000000').slice(0, 20);
+        const { data: userData, error: userErr } = await supabaseClient
+          .from('usuario')
+          .upsert(
+            {
+              nombre: name,
+              tipo: dbRole,
+              fecha: new Date().toISOString().slice(0, 10),
+              estado: 'Activo',
+              correo: email,
+              telefono: cleanPhone
+            },
+            { onConflict: 'correo' }
+          )
+          .select()
+          .single();
+
+        if (userErr || !userData) {
+          console.warn('Error guardando usuario en Supabase:', userErr);
+          return;
+        }
+
+        if (role === 'Agricultor') {
+          await supabaseClient.from('administrador').upsert(
+            {
+              id: userData.id,
+              documento: cleanDocument,
+              direccion_facturacion: createdFarm?.municipality || 'Bucaramanga',
+              telefono_coorporativo: cleanPhone
+            },
+            { onConflict: 'id' }
+          );
+
+          if (createdFarm) {
+            const { data: farmData, error: farmErr } = await supabaseClient
+              .from('granja')
+              .insert({
+                nombre: createdFarm.name,
+                municipio: createdFarm.municipality,
+                estado_suficiencia: 90,
+                direccion_gps: createdFarm.gpsCoords || 'POINT(7.1193 -73.1227)',
+                tamano: parseInt(createdFarm.area, 10) || 3,
+                fecha_creacion: new Date().toISOString().slice(0, 10),
+                administrador_id: userData.id,
+                meta_inversion: createdFarm.fundingGoal,
+                recaudado_inversion: 0,
+                roi_estimado: createdFarm.roiEstimate,
+                eficiencia_iot: createdFarm.iotEfficiency
+              })
+              .select()
+              .single();
+
+            if (!farmErr && farmData && createdProduct) {
+              await supabaseClient.from('producto').insert({
+                nombre: createdProduct.name,
+                descripcion: `${createdProduct.name} — Producción agroecológica en ${createdFarm.municipality}.`,
+                categoria: createdProduct.category,
+                precio: createdProduct.price,
+                stock: createdProduct.stock,
+                stock_minimo: createdProduct.minStock,
+                unidad_medida: createdProduct.unit,
+                emoji: createdProduct.emoji,
+                bg: createdProduct.bg,
+                vendible: createdProduct.sellable,
+                granja_id: farmData.id
+              });
+            }
+          }
+        } else if (role === 'Cliente') {
+          await supabaseClient.from('cliente').upsert(
+            { id: userData.id, direccion: 'Bucaramanga, Santander' },
+            { onConflict: 'id' }
+          );
+        } else if (role === 'Inversionista') {
+          await supabaseClient.from('proveedor_inversionista').upsert(
+            { id: userData.id, sectcr_interes: 'Agroecología', tipo_persona: 'Persona Natural' },
+            { onConflict: 'id' }
+          );
+        }
+      } catch (e) {
+        console.warn('Error sincronizando registro en Supabase:', e);
+      }
+    }
+
+    function formatCOP(value) {
+      return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        maximumFractionDigits: 0
+      }).format(Number(value || 0));
+    }
+
+    function showToast(icon, message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.remove('hidden');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3800);
+    }
+
+    function appendMqttLog(msg, tone = 'info') {
+      const box = document.getElementById('mqttLogBox');
+      if (!box) return;
+      const colorClass =
+        tone === 'error' ? 'text-red-700 font-semibold' :
+        tone === 'warn' ? 'text-amber-800 font-medium' :
+        'text-emerald-800';
+      const time = new Date().toLocaleTimeString('es-CO', { hour12: false });
+      const line = document.createElement('div');
+      line.className = colorClass;
+      line.textContent = `[${time}] ${msg}`;
+      box.prepend(line);
+    }
+
+    function navigateTo(viewName) {
+      state.currentView = viewName;
+      saveState();
+
+      ['login', 'farmer', 'store', 'investor'].forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (el) el.classList.toggle('hidden', v !== viewName);
+      });
+
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      if (state.currentView === 'login') renderLogin();
+      if (state.currentView === 'farmer') renderFarmerDashboard();
+      if (state.currentView === 'store') renderStore();
+      if (state.currentView === 'investor') renderInvestorPortal();
+    }
+
+    function resetDemoData() {
+      localStorage.removeItem(STORAGE_KEY);
+      state = structuredClone(DEFAULT_STATE);
+      saveState();
+      showToast('🔄', 'Datos de demostración restaurados a su estado inicial.');
+      renderCurrentView();
+    }
+
+    function logoutSession() {
+      state.activeUser = null;
+      state.authMode = 'login';
+      saveState();
+      navigateTo('login');
+      showToast('👋', 'Sesión cerrada.');
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. AUTENTICACIÓN Y REGISTRO MULTI-ROL
+    // -----------------------------------------------------------------------
+    function switchAuthMode(mode) {
+      state.authMode = mode;
+      saveState();
+      renderLogin();
+    }
+
+    function selectLoginRole(role) {
+      state.selectedLoginRole = role;
+      saveState();
+      renderLogin();
+    }
+
+    function selectRegisterRole(role) {
+      state.selectedRegisterRole = role;
+      saveState();
+      renderLogin();
+      if (role === 'Agricultor') {
+        syncGpsByMunicipality();
+      }
+    }
+
+    function syncGpsByMunicipality() {
+      const muniInput = document.getElementById('regMunicipality');
+      const gpsInput = document.getElementById('regGpsCoords');
+      const statusEl = document.getElementById('regGpsStatus');
+      if (!muniInput || !gpsInput) return;
+
+      const pointStr = getCoordinatesForMunicipality(muniInput.value);
+      gpsInput.value = pointStr;
+      updateMapMarkerFromPoint(pointStr);
+      if (statusEl) {
+        statusEl.textContent = `Centrada en ${muniInput.value.trim() || 'Santander'}. Puedes ajustar en el mapa.`;
+      }
+    }
+
+    function parsePointCoords(pointStr) {
+      const match = /POINT\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i.exec(pointStr || '');
+      if (!match) return null;
+      const lat = Number(match[1]);
+      const lng = Number(match[2]);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+      return [lat, lng];
+    }
+
+    function setGpsPoint(lat, lng, statusMessage, zoomLevel = 14) {
+      const gpsInput = document.getElementById('regGpsCoords');
+      const statusEl = document.getElementById('regGpsStatus');
+      const pointStr = `POINT(${Number(lat).toFixed(4)} ${Number(lng).toFixed(4)})`;
+      if (gpsInput) gpsInput.value = pointStr;
+      if (statusEl && statusMessage) statusEl.textContent = statusMessage;
+
+      if (farmPickerMap && farmPickerMarker) {
+        farmPickerMarker.setLatLng([lat, lng]);
+        farmPickerMap.setView([lat, lng], zoomLevel);
+      }
+    }
+
+    function updateMapMarkerFromPoint(pointStr) {
+      const coords = parsePointCoords(pointStr);
+      if (!coords || !farmPickerMap || !farmPickerMarker) return;
+      farmPickerMarker.setLatLng(coords);
+      farmPickerMap.setView(coords, farmPickerMap.getZoom() || 13);
+    }
+
+    function syncMapFromGpsInput() {
+      const gpsInput = document.getElementById('regGpsCoords');
+      if (!gpsInput) return;
+      updateMapMarkerFromPoint(gpsInput.value);
+    }
+
+    function ensureFarmMapInitialized() {
+      const mapEl = document.getElementById('farmPickerMap');
+      if (!mapEl || typeof L === 'undefined') return;
+
+      const gpsInput = document.getElementById('regGpsCoords');
+      const muniInput = document.getElementById('regMunicipality');
+      const initialCoords = parsePointCoords(gpsInput?.value) ||
+        parsePointCoords(getCoordinatesForMunicipality(muniInput?.value)) ||
+        [7.1193, -73.1227];
+
+      if (!farmPickerMap) {
+        farmPickerMap = L.map('farmPickerMap').setView(initialCoords, 12);
+
+        const streetAndLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: '&copy; Esri World Street Map'
+        });
+
+        const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: '&copy; Esri World Imagery'
+        });
+
+        const esriLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: '&copy; Esri Places'
+        });
+
+        const satelliteWithLabels = L.layerGroup([esriSatellite, esriLabels]);
+
+        santanderMunicipalitiesLayer = L.layerGroup();
+        santanderVeredasLayer = L.layerGroup();
+
+        SANTANDER_PLACES.forEach(place => {
+          if (place.type === 'Municipio') {
+            L.circleMarker([place.lat, place.lng], {
+              radius: 4.5,
+              color: '#143820',
+              fillColor: '#E8A838',
+              fillOpacity: 0.95,
+              weight: 1.5
+            })
+              .bindTooltip(place.name, { permanent: true, direction: 'right', offset: [6, 0] })
+              .on('click', () => {
+                selectSantanderPlaceByIndex(0, encodeURIComponent(place.name));
+              })
+              .addTo(santanderMunicipalitiesLayer);
+          } else {
+            L.circleMarker([place.lat, place.lng], {
+              radius: 3.5,
+              color: '#854D0E',
+              fillColor: '#FDE68A',
+              fillOpacity: 0.95,
+              weight: 1.2
+            })
+              .bindTooltip(`${place.name} (${place.municipio})`, { permanent: true, direction: 'right', offset: [5, 0] })
+              .on('click', () => {
+                selectSantanderPlaceByIndex(0, encodeURIComponent(place.name));
+              })
+              .addTo(santanderVeredasLayer);
+          }
+        });
+
+        streetAndLabels.addTo(farmPickerMap);
+        santanderMunicipalitiesLayer.addTo(farmPickerMap);
+
+        L.control.layers(
+          {
+            'Mapa (Calles y Nombres)': streetAndLabels,
+            'Satélite + Nombres': satelliteWithLabels,
+            'Solo Satélite': esriSatellite
+          },
+          {
+            'Municipios Santander': santanderMunicipalitiesLayer,
+            'Veredas Santander': santanderVeredasLayer
+          },
+          { position: 'topright' }
+        ).addTo(farmPickerMap);
+
+        farmPickerMarker = L.marker(initialCoords, { draggable: true }).addTo(farmPickerMap);
+
+        farmPickerMarker.on('dragend', () => {
+          const pos = farmPickerMarker.getLatLng();
+          setGpsPoint(pos.lat, pos.lng, `Marcador movido a POINT(${pos.lat.toFixed(4)} ${pos.lng.toFixed(4)}).`, farmPickerMap.getZoom());
+        });
+
+        farmPickerMap.on('click', (e) => {
+          setGpsPoint(e.latlng.lat, e.latlng.lng, `Ubicación seleccionada en mapa: POINT(${e.latlng.lat.toFixed(4)} ${e.latlng.lng.toFixed(4)}).`, farmPickerMap.getZoom());
+        });
+
+        farmPickerMap.on('zoomend', updatePlaceVisibilityByZoom);
+        updatePlaceVisibilityByZoom();
+      } else {
+        farmPickerMarker.setLatLng(initialCoords);
+        farmPickerMap.setView(initialCoords, 12);
+        updatePlaceVisibilityByZoom();
+      }
+
+      setTimeout(() => {
+        farmPickerMap.invalidateSize();
+      }, 100);
+    }
+
+    function toggleFarmMapPicker() {
+      const container = document.getElementById('farmMapContainer');
+      if (!container) return;
+      const willShow = container.classList.contains('hidden');
+      container.classList.toggle('hidden', !willShow);
+      if (willShow) {
+        ensureFarmMapInitialized();
+      }
+    }
+
+    function detectFarmGps() {
+      const statusEl = document.getElementById('regGpsStatus');
+      const muniInput = document.getElementById('regMunicipality');
+      const container = document.getElementById('farmMapContainer');
+
+      if (!navigator.geolocation) {
+        if (container) container.classList.remove('hidden');
+        ensureFarmMapInitialized();
+        showToast('🗺️', 'GPS del navegador no disponible. Selecciona el punto en el mapa.');
+        return;
+      }
+
+      if (statusEl) statusEl.textContent = 'Obteniendo ubicación GPS en vivo...';
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          if (container) container.classList.remove('hidden');
+          ensureFarmMapInitialized();
+          setGpsPoint(
+            lat,
+            lng,
+            `GPS en vivo activo (±${Math.round(pos.coords.accuracy)} m): POINT(${lat.toFixed(4)} ${lng.toFixed(4)}).`,
+            15
+          );
+          showToast('📍', `GPS en vivo detectado: POINT(${lat.toFixed(4)} ${lng.toFixed(4)})`);
+        },
+        () => {
+          const fallbackPoint = getCoordinatesForMunicipality(muniInput?.value);
+          const coords = parsePointCoords(fallbackPoint) || [7.1193, -73.1227];
+          if (container) container.classList.remove('hidden');
+          ensureFarmMapInitialized();
+          setGpsPoint(
+            coords[0],
+            coords[1],
+            `Permiso GPS denegado o no disponible. Ajusta el marcador en el mapa para ${muniInput?.value || 'Santander'}.`,
+            13
+          );
+          showToast('🗺️', 'No se obtuvo GPS en vivo; abre el mapa y haz clic para elegir la ubicación.');
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    }
+
+    function renderLogin() {
+      const isLogin = state.authMode === 'login';
+      document.getElementById('loginFormContainer').classList.toggle('hidden', !isLogin);
+      document.getElementById('registerFormContainer').classList.toggle('hidden', isLogin);
+
+      document.getElementById('authTabLogin').className = isLogin
+        ? 'px-3 py-1.5 rounded-md bg-white text-campo-ink shadow-sm transition'
+        : 'px-3 py-1.5 rounded-md text-campo-muted hover:text-campo-ink transition';
+      document.getElementById('authTabRegister').className = !isLogin
+        ? 'px-3 py-1.5 rounded-md bg-white text-campo-ink shadow-sm transition'
+        : 'px-3 py-1.5 rounded-md text-campo-muted hover:text-campo-ink transition';
+
+      document.querySelectorAll('.role-btn').forEach(btn => {
+        const active = btn.dataset.role === state.selectedLoginRole;
+        btn.className = active
+          ? 'role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium bg-white text-campo-ink shadow-sm transition'
+          : 'role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium text-campo-muted hover:text-campo-ink transition';
+      });
+
+      document.getElementById('loginSubmitBtn').textContent = `Ingresar como ${state.selectedLoginRole}`;
+
+      document.querySelectorAll('.reg-role-btn').forEach(btn => {
+        const active = btn.dataset.regRole === state.selectedRegisterRole;
+        btn.className = active
+          ? 'reg-role-btn py-2 px-2 rounded-lg text-xs font-medium bg-white text-campo-ink shadow-sm transition'
+          : 'reg-role-btn py-2 px-2 rounded-lg text-xs font-medium text-campo-muted hover:text-campo-ink transition';
+      });
+
+      const farmFields = document.getElementById('farmerFarmFields');
+      if (farmFields) {
+        farmFields.classList.toggle('hidden', state.selectedRegisterRole !== 'Agricultor');
+      }
+      const docField = document.getElementById('farmerDocumentField');
+      if (docField) {
+        docField.classList.toggle('hidden', state.selectedRegisterRole !== 'Agricultor');
+      }
+    }
+
+    function showLoginFeedback(message, isError = true) {
+      const box = document.getElementById('loginFeedback');
+      box.textContent = message;
+      box.classList.remove('hidden');
+      box.className = isError
+        ? 'rounded-xl px-3.5 py-2.5 text-xs font-medium border bg-red-50 border-red-200 text-red-700'
+        : 'rounded-xl px-3.5 py-2.5 text-xs font-medium border bg-emerald-50 border-emerald-200 text-emerald-800';
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      if (state.lockedOut) {
+        showLoginFeedback('Cuenta bloqueada temporalmente tras 3 intentos fallidos. Pulsa "Restaurar Demo" para desbloquear.', true);
+        return;
+      }
+
+      const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+      const password = document.getElementById('loginPassword').value.trim();
+
+      const found = state.users.find(u => u.email.toLowerCase() === email && u.password === password);
+
+      if (!found) {
+        state.failedAttempts += 1;
+        if (state.failedAttempts >= 3) {
+          state.lockedOut = true;
+          saveState();
+          showLoginFeedback('Se superaron los 3 intentos permitidos. Acceso bloqueado por seguridad.', true);
+          return;
+        }
+        saveState();
+        showLoginFeedback(`Credenciales inválidas. Intento ${state.failedAttempts} de 3.`, true);
+        return;
+      }
+
+      state.failedAttempts = 0;
+      state.activeUser = {
+        name: found.name,
+        email: found.email,
+        role: state.selectedLoginRole || found.role,
+        farmName: found.farmName || state.farms[0]?.name || 'Granja El Roble'
+      };
+      saveState();
+      redirectByRole(state.activeUser.role);
+    }
+
+    function handleRegisterSubmit(e) {
+      e.preventDefault();
+      const name = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim().toLowerCase();
+      const phone = document.getElementById('regPhone').value.trim();
+      const documentId = (document.getElementById('regDocument')?.value || '').trim();
+      const password = document.getElementById('regPassword').value.trim();
+      const role = state.selectedRegisterRole;
+
+      if (!name || !email || !phone || !password) return;
+      const duplicate = state.users.some(u => u.email.toLowerCase() === email);
+      if (duplicate) {
+        const fb = document.getElementById('registerFeedback');
+        fb.textContent = 'Ya existe una cuenta registrada con ese correo electrónico.';
+        fb.classList.remove('hidden');
+        fb.className = 'rounded-xl px-3.5 py-2.5 text-xs font-medium border bg-red-50 border-red-200 text-red-700';
+        return;
+      }
+
+      let createdFarmName = null;
+      let createdFarmObj = null;
+      let createdProductObj = null;
+
+      if (role === 'Agricultor') {
+        const farmName = (document.getElementById('regFarmName').value || '').trim() || `Granja de ${name.split(' ')[0]}`;
+        const municipality = (document.getElementById('regMunicipality').value || '').trim() || 'Bucaramanga';
+        const gpsCoords = (document.getElementById('regGpsCoords')?.value || '').trim() || getCoordinatesForMunicipality(municipality);
+        const area = (document.getElementById('regFarmArea').value || '').trim() || '3.5 ha';
+        const mainCrop = (document.getElementById('regMainCrop').value || '').trim() || 'Cultivos Orgánicos';
+        const fundingGoal = Math.max(1000000, Number(document.getElementById('regFundingGoal').value) || 18000000);
+
+        const newFarm = {
+          id: Date.now(),
+          name: farmName,
+          farmerName: name,
+          municipality,
+          gpsCoords,
+          area,
+          mainCrop,
+          iotEfficiency: 96.0,
+          roiEstimate: 23.0,
+          fundingGoal,
+          fundingRaised: 0
+        };
+        state.farms.push(newFarm);
+        createdFarmName = farmName;
+        createdFarmObj = newFarm;
+
+        const prodName = (document.getElementById('regProductName').value || '').trim();
+        const prodPrice = Number(document.getElementById('regProductPrice').value) || 0;
+        if (prodName && prodPrice > 0) {
+          const newProd = {
+            id: Date.now() + 1,
+            farmId: newFarm.id,
+            farmName,
+            municipality,
+            name: prodName,
+            category: 'Granja',
+            unit: 'kg',
+            stock: 25,
+            minStock: 5,
+            price: prodPrice,
+            emoji: '🌱',
+            bg: '#E8EBD8',
+            sellable: true
+          };
+          state.products.push(newProd);
+          createdProductObj = newProd;
+        }
+      }
+
+      const newUser = { name, email, phone, documentId, password, role, farmName: createdFarmName };
+      state.users.push(newUser);
+      state.activeUser = {
+        name,
+        email,
+        phone,
+        role,
+        farmName: createdFarmName || state.farms[0]?.name || 'Granja El Roble'
+      };
+      state.failedAttempts = 0;
+      state.lockedOut = false;
+      pushRegistrationToSupabase({
+        name,
+        email,
+        phone,
+        documentId,
+        role,
+        createdFarm: createdFarmObj,
+        createdProduct: createdProductObj
+      });
+      saveState();
+
+      showToast('🎉', `Cuenta creada como ${role}${createdFarmName ? ` • Granja "${createdFarmName}" registrada` : ''}.`);
+      redirectByRole(role);
+    }
+
+    function quickDemoLogin(role) {
+      const preset = state.users.find(u => u.role === role) || {
+        name: role === 'Agricultor' ? 'Jesús Celis' : role === 'Cliente' ? 'Karla Martínez' : 'Inversor Santander',
+        email: role === 'Agricultor' ? 'agricultor@campovivo.co' : role === 'Cliente' ? 'karla.martinez@gmail.com' : 'inversor@campovivo.co',
+        role,
+        farmName: state.farms[0]?.name || 'Granja El Roble'
+      };
+      state.activeUser = {
+        name: preset.name,
+        email: preset.email,
+        role,
+        farmName: preset.farmName || state.farms[0]?.name || 'Granja El Roble'
+      };
+      state.failedAttempts = 0;
+      state.lockedOut = false;
+      saveState();
+      redirectByRole(role);
+    }
+
+    function redirectByRole(role) {
+      if (role === 'Cliente') {
+        navigateTo('store');
+      } else if (role === 'Inversionista') {
+        navigateTo('investor');
+      } else {
+        navigateTo('farmer');
+      }
+      showToast('🌱', `Sesión iniciada como ${role} (${state.activeUser.name}).`);
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. PANEL DEL AGRICULTOR (IoT + SIMULADOR MQTT, CONTABILIDAD, INVENTARIO)
+    // -----------------------------------------------------------------------
+    function switchFarmerTab(tab) {
+      state.farmerTab = tab;
+      saveState();
+      renderFarmerDashboard();
+    }
+
+    function renderFarmerDashboard() {
+      const user = state.activeUser || { name: 'Jesús Celis', farmName: 'Granja El Roble' };
+      const initials = user.name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'CV';
+      document.getElementById('farmerAvatarInitials').textContent = initials;
+      document.getElementById('farmerSessionName').textContent = user.name;
+      const activeFarm = state.farms.find(f => f.name === user.farmName) || state.farms[0];
+      if (activeFarm) {
+        document.getElementById('farmerFarmBadge').textContent = `${activeFarm.name} • ${activeFarm.municipality}`;
+      }
+
+      ['iot', 'accounting', 'inventory'].forEach(t => {
+        document.getElementById(`farmer-tab-${t}`).classList.toggle('hidden', state.farmerTab !== t);
+      });
+
+      document.querySelectorAll('.ftab-btn').forEach(btn => {
+        const active = btn.dataset.ftab === state.farmerTab;
+        btn.className = active
+          ? 'ftab-btn flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium bg-white/15 text-white whitespace-nowrap transition'
+          : 'ftab-btn flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-emerald-100/80 hover:bg-white/10 whitespace-nowrap transition';
+      });
+
+      if (state.farmerTab === 'iot') renderTelemetryTab();
+      if (state.farmerTab === 'accounting') renderAccountingTab();
+      if (state.farmerTab === 'inventory') renderInventoryTab();
+    }
+
+    function updateMqttPreview() {
+      const nodeEl = document.getElementById('simNodeSelect');
+      const humEl = document.getElementById('simHumidityInput');
+      const tempEl = document.getElementById('simTempInput');
+      const prevEl = document.getElementById('mqttPayloadPreview');
+      if (!nodeEl || !humEl || !tempEl || !prevEl) return;
+
+      const payload = {
+        nodo: nodeEl.value,
+        humedad: Number(humEl.value),
+        temp: Number(tempEl.value),
+        ip67: true
+      };
+      prevEl.textContent = JSON.stringify(payload);
+    }
+
+    function isValidTelemetryFrame(hum, temp) {
+      if (typeof hum !== 'number' || typeof temp !== 'number') return false;
+      if (Number.isNaN(hum) || Number.isNaN(temp)) return false;
+      if (hum < 0 || hum > 100) return false;
+      if (temp < -10 || temp > 70) return false;
+      return true;
+    }
+
+    function applyValidatedReading(nodeId, hum, temp, isBatch = false) {
+      const t = state.telemetry;
+      t.readingsToday += 1;
+      t.avgTemp = Number(((t.avgTemp * 9 + temp) / 10).toFixed(1));
+      t.avgHumidity = Math.round((t.avgHumidity * 9 + hum) / 10);
+
+      const nodeObj = t.nodes.find(n => n.id === nodeId);
+      if (nodeObj) {
+        nodeObj.temp = temp;
+        nodeObj.hum = hum;
+        nodeObj.status = (hum < 42 || temp > 30) ? 'Alerta' : 'Online';
+      }
+
+      const nowLabel = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      t.historyLabels.push(nowLabel);
+      t.historyHumidity.push(hum);
+      t.historyTemp.push(temp);
+      if (t.historyLabels.length > 10) {
+        t.historyLabels.shift();
+        t.historyHumidity.shift();
+        t.historyTemp.shift();
+      }
+
+      pushTelemetryToSupabase(nodeId, hum, temp);
+      appendMqttLog(`${isBatch ? '[BATCH SYNC] ' : ''}${nodeId} → Hum: ${hum}% | Temp: ${temp}°C (Aceptada)`, 'info');
+    }
+
+    function sendCustomEsp32Frame() {
+      const nodeId = document.getElementById('simNodeSelect').value;
+      const hum = Number(document.getElementById('simHumidityInput').value);
+      const temp = Number(document.getElementById('simTempInput').value);
+
+      if (!isValidTelemetryFrame(hum, temp)) {
+        appendMqttLog(`DROP: Trama inválida desde ${nodeId} (hum=${hum}, temp=${temp} fuera de rango físico).`, 'error');
+        showToast('⛔', `Trama corrupta rechazada en ${nodeId}.`);
+        return;
+      }
+
+      if (!state.telemetry.networkOnline) {
+        state.telemetry.offlineBuffer.push({ nodeId, hum, temp, ts: Date.now() });
+        saveState();
+        appendMqttLog(`BUFFER SD: Sin red. Guardada lectura de ${nodeId} (${hum}%, ${temp}°C) en memoria local.`, 'warn');
+        showToast('💾', `Sin red: trama de ${nodeId} guardada en búfer SD local (${state.telemetry.offlineBuffer.length} en cola).`);
+        renderTelemetryTab();
+        return;
+      }
+
+      applyValidatedReading(nodeId, hum, temp, false);
+      saveState();
+      renderTelemetryTab();
+      showToast('📡', `Trama recibida desde ${nodeId}: ${hum}% humedad · ${temp} °C.`);
+    }
+
+    function toggleRuralNetwork() {
+      const t = state.telemetry;
+      t.networkOnline = !t.networkOnline;
+
+      if (t.networkOnline && t.offlineBuffer.length > 0) {
+        const queued = [...t.offlineBuffer];
+        t.offlineBuffer = [];
+        appendMqttLog(`RED RESTABLECIDA: Sincronizando ${queued.length} trama(s) en lote desde SD local...`, 'info');
+        queued.forEach(item => applyValidatedReading(item.nodeId, item.hum, item.temp, true));
+        showToast('☁️', `Red restaurada: ${queued.length} lectura(s) sincronizadas automáticamente.`);
+      } else if (!t.networkOnline) {
+        appendMqttLog('RED RURAL INTERRUMPIDA: Modo Offline-First activado en nodos ESP32.', 'warn');
+        showToast('📴', 'Red rural desconectada. Las lecturas nuevas se guardarán en SD local.');
+      } else {
+        appendMqttLog('Broker MQTT reconectado.', 'info');
+        showToast('🌐', 'Conexión de red activa.');
+      }
+
+      saveState();
+      renderTelemetryTab();
+    }
+
+    function renderTelemetryTab() {
+      const t = state.telemetry;
+      const activeCount = t.nodes.filter(n => n.status !== 'Offline').length;
+      const offlineNodes = t.nodes.filter(n => n.status === 'Offline');
+      const alertNodes = t.nodes.filter(n => n.status === 'Alerta');
+
+      document.getElementById('iotSubtitle').textContent = `Lecturas en tiempo real de ${t.nodes.length} sensores ESP32`;
+      document.getElementById('kpiTemp').textContent = `${t.avgTemp} °C`;
+      document.getElementById('kpiHumidity').textContent = `${t.avgHumidity} %`;
+      document.getElementById('kpiSensors').textContent = `${activeCount} / ${t.nodes.length}`;
+      document.getElementById('kpiSensorsSub').textContent = offlineNodes.length > 0
+        ? `${offlineNodes.map(n => n.id).join(', ')} sin conexión`
+        : 'Todos los nodos transmitiendo';
+      document.getElementById('kpiReadings').textContent = t.readingsToday.toLocaleString('es-CO');
+
+      const alertBanner = document.getElementById('iotAlertBanner');
+      const alertText = document.getElementById('iotAlertText');
+      const reconnectBtn = document.getElementById('reconnectEsp32Btn');
+      const notifDot = document.getElementById('notifDot');
+
+      const hasOutOfRangeEnv = t.avgHumidity < 45 || t.avgTemp > 30;
+      const hasOffline = offlineNodes.length > 0;
+      const hasNodeAlerts = alertNodes.length > 0;
+      const hasAnyAlert = hasOutOfRangeEnv || hasOffline || hasNodeAlerts;
+
+      if (notifDot) notifDot.classList.toggle('hidden', !hasAnyAlert);
+
+      if (alertBanner && alertText) {
+        if (!hasAnyAlert) {
+          alertBanner.classList.add('hidden');
+          alertText.textContent = '';
+          if (reconnectBtn) reconnectBtn.classList.add('hidden');
+        } else {
+          alertBanner.classList.remove('hidden');
+          const messages = [];
+          if (hasOutOfRangeEnv || hasNodeAlerts) {
+            const detail = alertNodes.length > 0
+              ? alertNodes.map(n => `${n.id} (${n.hum}% HR, ${n.temp}°C)`).join(', ')
+              : `humedad ${t.avgHumidity}% y temperatura ${t.avgTemp}°C`;
+            messages.push(`Alerta ambiental: ${detail}. Se recomienda revisar riego/ventilación.`);
+          }
+          if (hasOffline) {
+            messages.push(`Alerta: ${offlineNodes.map(n => n.id).join(', ')} sin conexión.`);
+          }
+          alertText.textContent = messages.join(' • ');
+          if (reconnectBtn) {
+            reconnectBtn.classList.toggle('hidden', !offlineNodes.some(n => n.id === 'ESP32-05'));
+          }
+        }
+      }
+
+      const mqttBadge = document.getElementById('mqttConnBadge');
+      const bufBadge = document.getElementById('mqttBufferBadge');
+      const netBtn = document.getElementById('toggleNetworkBtn');
+      if (mqttBadge && bufBadge && netBtn) {
+        if (t.networkOnline) {
+          mqttBadge.textContent = '● Broker MQTT Online';
+          mqttBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800';
+          netBtn.textContent = 'Cortar Red';
+        } else {
+          mqttBadge.textContent = '○ Red Rural Offline';
+          mqttBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800';
+          netBtn.textContent = 'Restaurar Red';
+        }
+        bufBadge.textContent = `SD Local: ${t.offlineBuffer.length} tramas`;
+      }
+      updateMqttPreview();
+
+      const nodesGrid = document.getElementById('nodesGrid');
+      nodesGrid.innerHTML = t.nodes.map(n => {
+        const badgeStyle =
+          n.status === 'Online' ? 'bg-emerald-100 text-emerald-800' :
+          n.status === 'Alerta' ? 'bg-amber-100 text-amber-800' :
+          'bg-red-100 text-red-700';
+        const fixAction = n.status === 'Alerta'
+          ? `<button type="button" onclick="resolveNodeAlert('${n.id}')" class="mt-2 w-full rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-950 text-[11px] font-semibold py-1 transition">Normalizar lectura</button>`
+          : '';
+        return `
+          <div class="rounded-xl border border-campo-border bg-campo-bg p-3.5 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-xs text-campo-ink">${n.id}</span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${badgeStyle}">${n.status}</span>
+            </div>
+            <div class="text-[11px] text-campo-muted">${n.zone}</div>
+            <div class="text-xs font-medium text-campo-ink pt-1">${n.hum}% HR · ${n.temp} °C</div>
+            ${fixAction}
+          </div>
+        `;
+      }).join('');
+
+      drawTelemetryChart();
+    }
+
+    function resolveNodeAlert(nodeId) {
+      const node = state.telemetry.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+      node.status = 'Online';
+      node.hum = 62;
+      node.temp = 24.2;
+      state.telemetry.avgHumidity = 62;
+      state.telemetry.avgTemp = 24.2;
+      appendMqttLog(`Alerta resuelta en ${nodeId}: lectura normalizada (62% HR · 24.2°C).`, 'info');
+      saveState();
+      renderTelemetryTab();
+      showToast('✅', `Alerta de ${nodeId} resuelta.`);
+    }
+
+    function drawTelemetryChart() {
+      const canvas = document.getElementById('telemetryChart');
+      if (!canvas || typeof Chart === 'undefined') return;
+      const ctx = canvas.getContext('2d');
+      const t = state.telemetry;
+
+      if (telemetryChartInstance) {
+        telemetryChartInstance.destroy();
+      }
+
+      telemetryChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: t.historyLabels,
+          datasets: [
+            {
+              label: 'Humedad (%)',
+              data: t.historyHumidity,
+              borderColor: '#1F6E78',
+              backgroundColor: 'rgba(31, 110, 120, 0.14)',
+              fill: true,
+              tension: 0.35,
+              borderWidth: 2.5,
+              pointRadius: 3
+            },
+            {
+              label: 'Temperatura (°C)',
+              data: t.historyTemp,
+              borderColor: '#E8A838',
+              backgroundColor: 'rgba(232, 168, 56, 0.1)',
+              fill: false,
+              tension: 0.35,
+              borderWidth: 2,
+              pointRadius: 2.5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: false, min: 10, max: 100 }
+          },
+          plugins: {
+            legend: { position: 'top' }
+          }
+        }
+      });
+    }
+
+    function refreshTelemetry(notify = false) {
+      if (!state.telemetry.networkOnline) {
+        showToast('📴', 'Sin conexión: mostrando última información conservada en caché/SD.');
+        renderTelemetryTab();
+        return;
+      }
+      const nextHum = Math.min(85, Math.max(52, state.telemetry.avgHumidity + (Math.random() > 0.5 ? 1 : -1)));
+      const nextTemp = Number(Math.min(29, Math.max(19, state.telemetry.avgTemp + (Math.random() > 0.5 ? 0.2 : -0.2))).toFixed(1));
+      state.telemetry.avgHumidity = nextHum;
+      state.telemetry.avgTemp = nextTemp;
+      state.telemetry.readingsToday += 1;
+      state.telemetry.historyLabels.push(new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }));
+      state.telemetry.historyHumidity.push(nextHum);
+      state.telemetry.historyTemp.push(nextTemp);
+      if (state.telemetry.historyLabels.length > 10) {
+        state.telemetry.historyLabels.shift();
+        state.telemetry.historyHumidity.shift();
+        state.telemetry.historyTemp.shift();
+      }
+      pushTelemetryToSupabase('ESP32-01', nextHum, nextTemp);
+      appendMqttLog(`Refresco manual: Hum ${nextHum}% · Temp ${nextTemp}°C`, 'info');
+      saveState();
+      renderTelemetryTab();
+      if (notify) showToast('↻', 'Tablero de telemetría actualizado.');
+    }
+
+    function simulateEsp32Packet(corrupt = false) {
+      if (corrupt) {
+        appendMqttLog('DROP: Paquete dañado {"nodo":"ESP32-01","humedad":NaN,"temp":-999} rechazado.', 'error');
+        showToast('⛔', 'Trama corrupta detectada y rechazada por validación de rango.');
+        return;
+      }
+      const hum = Math.floor(56 + Math.random() * 18);
+      const temp = Number((22.5 + Math.random() * 4.5).toFixed(1));
+      if (!state.telemetry.networkOnline) {
+        state.telemetry.offlineBuffer.push({ nodeId: 'ESP32-01', hum, temp, ts: Date.now() });
+        saveState();
+        appendMqttLog(`BUFFER SD: Guardada trama simulada (${hum}%, ${temp}°C) sin red.`, 'warn');
+        showToast('💾', 'Sin red: trama guardada en búfer SD local.');
+        renderTelemetryTab();
+        return;
+      }
+      applyValidatedReading('ESP32-01', hum, temp, false);
+      saveState();
+      renderTelemetryTab();
+      showToast('📡', `Nueva trama ESP32-01 recibida: ${hum}% humedad · ${temp} °C.`);
+    }
+
+    function reconnectEsp32_05() {
+      const node = state.telemetry.nodes.find(n => n.id === 'ESP32-05');
+      if (node) {
+        node.status = 'Online';
+        node.hum = 63;
+        node.temp = 23.4;
+      }
+      appendMqttLog('Nodo ESP32-05 reconectado al Broker MQTT (63% HR · 23.4°C).', 'info');
+      saveState();
+      renderTelemetryTab();
+      showToast('✅', 'Nodo ESP32-05 reconectado y transmitiendo.');
+    }
+
+    // Contabilidad
+    function renderAccountingTab() {
+      let income = 0;
+      let expense = 0;
+      state.accounting.forEach(item => {
+        if (item.category === 'Ingreso') income += Number(item.amount);
+        else expense += Number(item.amount);
+      });
+      const balance = income - expense;
+
+      document.getElementById('accIncome').textContent = formatCOP(income);
+      document.getElementById('accExpense').textContent = formatCOP(expense);
+      document.getElementById('accBalance').textContent = formatCOP(balance);
+
+      const tbody = document.getElementById('accountingTableBody');
+      tbody.innerHTML = [...state.accounting].reverse().map(entry => {
+        const isInc = entry.category === 'Ingreso';
+        const badge = isInc
+          ? 'bg-emerald-100 text-emerald-800'
+          : entry.category === 'Nómina'
+          ? 'bg-amber-100 text-amber-800'
+          : 'bg-red-100 text-red-700';
+        return `
+          <tr>
+            <td class="py-3 pr-3 text-xs text-campo-muted whitespace-nowrap">${entry.date}</td>
+            <td class="py-3 px-3"><span class="text-xs font-semibold px-2.5 py-0.5 rounded-full ${badge}">${entry.category}</span></td>
+            <td class="py-3 px-3 text-campo-ink">${entry.concept}</td>
+            <td class="py-3 pl-3 text-right font-semibold whitespace-nowrap ${isInc ? 'text-emerald-700' : 'text-red-700'}">
+              ${isInc ? '+' : '-'}${formatCOP(entry.amount)}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function addAccountingEntry(e) {
+      e.preventDefault();
+      const category = document.getElementById('accType').value;
+      const concept = document.getElementById('accConcept').value.trim();
+      const amount = Number(document.getElementById('accAmount').value);
+      const date = document.getElementById('accDate').value;
+
+      if (!concept || Number.isNaN(amount) || amount <= 0) {
+        showToast('⚠️', 'Ingresa un concepto válido y un monto mayor a $0 COP.');
+        return;
+      }
+
+      const newEntry = { id: Date.now(), date, concept, category, amount };
+      state.accounting.push(newEntry);
+      pushAccountingToSupabase(newEntry);
+      saveState();
+      document.getElementById('accConcept').value = '';
+      document.getElementById('accAmount').value = '';
+      renderAccountingTab();
+      showToast('💼', `${category} registrado y balance actualizado (${formatCOP(amount)}).`);
+    }
+
+    function exportAccountingReport() {
+      window.print();
+    }
+
+    // Inventario
+    function renderInventoryTab() {
+      const tbody = document.getElementById('inventoryTableBody');
+      tbody.innerHTML = state.products.map(p => {
+        const isLow = p.stock <= p.minStock;
+        const statusBadge = isLow
+          ? '<span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-red-100 text-red-700">Stock crítico</span>'
+          : '<span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Disponible</span>';
+        return `
+          <tr>
+            <td class="py-3 pr-3">
+              <div class="font-medium text-campo-ink">${p.emoji} ${p.name}</div>
+              <div class="text-xs text-campo-muted">${p.category} • ${p.unit}</div>
+            </td>
+            <td class="py-3 px-3 text-xs text-campo-muted">${p.farmName || 'Granja El Roble'}</td>
+            <td class="py-3 px-3 font-semibold text-campo-ink">${p.stock} ${p.unit}</td>
+            <td class="py-3 px-3">${statusBadge}</td>
+            <td class="py-3 px-3 text-right font-medium">${formatCOP(p.price)}</td>
+            <td class="py-3 pl-3 text-right whitespace-nowrap">
+              <button onclick="adjustStock(${p.id}, -1)" class="px-2 py-1 rounded border border-campo-border hover:bg-campo-bg text-xs font-bold">−</button>
+              <button onclick="adjustStock(${p.id}, 5)" class="px-2 py-1 rounded border border-campo-border hover:bg-campo-bg text-xs font-bold ml-1">+5</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function adjustStock(productId, delta) {
+      const prod = state.products.find(p => p.id === productId);
+      if (!prod) return;
+      prod.stock = Math.max(0, prod.stock + delta);
+      saveState();
+      renderInventoryTab();
+      if (prod.stock <= prod.minStock) {
+        showToast('🚨', `Alerta de stock bajo en "${prod.name}" (${prod.stock} ${prod.unit}).`);
+      }
+    }
+
+    function addInventoryItem(e) {
+      e.preventDefault();
+      const name = document.getElementById('invName').value.trim();
+      const category = document.getElementById('invCategory').value;
+      const unit = document.getElementById('invUnit').value.trim() || 'kg';
+      const stock = Math.max(0, Number(document.getElementById('invStock').value));
+      const minStock = Math.max(1, Number(document.getElementById('invMinStock').value));
+      const price = Math.max(100, Number(document.getElementById('invPrice').value));
+      const sellable = document.getElementById('invSellable').checked;
+
+      const activeFarm = state.farms.find(f => f.name === state.activeUser?.farmName) || state.farms[0];
+      const emojiMap = { Hortalizas: '🥬', Frutas: '🍊', Café: '☕', Granja: '🌿' };
+
+      const newProd = {
+        id: Date.now(),
+        farmId: activeFarm ? activeFarm.id : 1,
+        farmName: activeFarm ? activeFarm.name : 'Granja El Roble',
+        municipality: activeFarm ? activeFarm.municipality : 'Santander',
+        name,
+        category,
+        unit,
+        stock,
+        minStock,
+        price,
+        emoji: emojiMap[category] || '🌱',
+        bg: '#E8EBD8',
+        sellable
+      };
+
+      state.products.push(newProd);
+      pushProductToSupabase(newProd);
+      saveState();
+      document.getElementById('invName').value = '';
+      renderInventoryTab();
+      showToast('📦', `"${name}" agregado al inventario.`);
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. TIENDA ONLINE Y CHECKOUT CON FACTURA
+    // -----------------------------------------------------------------------
+    function selectCategory(cat) {
+      state.selectedCategory = cat;
+      saveState();
+      renderStore();
+    }
+
+    function renderStore() {
+      const farmSelect = document.getElementById('storeFarmFilter');
+      if (farmSelect) {
+        const currentVal = farmSelect.value || 'ALL';
+        farmSelect.innerHTML = `<option value="ALL">Todas las granjas</option>` +
+          state.farms.map(f => `<option value="${f.id}">${f.name} (${f.municipality})</option>`).join('');
+        farmSelect.value = [...farmSelect.options].some(o => o.value === currentVal) ? currentVal : 'ALL';
+      }
+
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        const active = btn.dataset.cat === state.selectedCategory;
+        btn.className = active
+          ? 'cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-campo-forest text-white transition'
+          : 'cat-btn px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium bg-white border border-campo-border text-campo-ink hover:bg-[#F3F1E8] transition';
+      });
+
+      const selectedFarmId = farmSelect ? farmSelect.value : 'ALL';
+
+      const visibleProducts = state.products.filter(p => {
+        const matchCat = state.selectedCategory === 'Todos' || p.category === state.selectedCategory;
+        const matchFarm = selectedFarmId === 'ALL' || String(p.farmId) === String(selectedFarmId);
+        return p.sellable && matchCat && matchFarm;
+      });
+
+      const grid = document.getElementById('productGrid');
+      if (visibleProducts.length === 0) {
+        grid.innerHTML = `<div class="col-span-full rounded-2xl bg-white border border-campo-border p-8 text-center text-sm text-campo-muted">No hay productos disponibles para este filtro.</div>`;
+      } else {
+        grid.innerHTML = visibleProducts.map(p => `
+          <article class="rounded-2xl bg-white border border-campo-border p-4 flex flex-col justify-between shadow-2xs hover:border-campo-leaf/50 transition">
+            <div>
+              <div class="h-36 rounded-xl flex items-center justify-center text-5xl mb-4" style="background-color: ${p.bg}">
+                <span>${p.emoji}</span>
+              </div>
+              <div class="text-[11px] font-medium text-campo-leaf mb-1">🏡 ${p.farmName || 'Granja El Roble'} • ${p.municipality || 'Santander'}</div>
+              <h3 class="font-editorial text-xl text-campo-ink leading-snug">${p.name}</h3>
+              <p class="text-xs text-campo-muted mt-1">${p.unit} · ${p.stock} disponibles</p>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 mt-3">
+              <span class="font-bold text-base text-campo-ink">${formatCOP(p.price)}</span>
+              <button
+                type="button"
+                onclick="addToCart(${p.id})"
+                ${p.stock <= 0 ? 'disabled' : ''}
+                class="w-9 h-9 rounded-full bg-campo-forest hover:bg-campo-forestHover disabled:bg-gray-300 text-white font-bold text-lg flex items-center justify-center transition"
+                title="Agregar al carrito"
+              >
+                +
+              </button>
+            </div>
+          </article>
+        `).join('');
+      }
+
+      renderCart();
+    }
+
+    function addToCart(productId) {
+      const prod = state.products.find(p => p.id === productId);
+      if (!prod || prod.stock <= 0) return;
+
+      const existing = state.cart.find(c => c.productId === productId);
+      const currentQty = existing ? existing.qty : 0;
+      if (currentQty + 1 > prod.stock) {
+        showToast('⚠️', `Solo hay ${prod.stock} ${prod.unit} disponibles de ${prod.name}.`);
+        return;
+      }
+
+      if (existing) existing.qty += 1;
+      else state.cart.push({ productId, qty: 1 });
+
+      saveState();
+      renderCart();
+      showToast('🛒', `${prod.name} agregado al carrito.`);
+    }
+
+    function changeCartQty(productId, delta) {
+      const idx = state.cart.findIndex(c => c.productId === productId);
+      if (idx === -1) return;
+      const prod = state.products.find(p => p.id === productId);
+      const nextQty = state.cart[idx].qty + delta;
+
+      if (nextQty <= 0) {
+        state.cart.splice(idx, 1);
+      } else if (prod && nextQty > prod.stock) {
+        showToast('⚠️', `Stock máximo disponible: ${prod.stock}.`);
+        return;
+      } else {
+        state.cart[idx].qty = nextQty;
+      }
+
+      saveState();
+      renderCart();
+    }
+
+    function clearCart() {
+      state.cart = [];
+      state.appliedCoupon = null;
+      saveState();
+      renderCart();
+    }
+
+    function applyCoupon() {
+      const code = document.getElementById('couponInput').value.trim().toUpperCase();
+      const msg = document.getElementById('couponMessage');
+      if (code === COUPON_CODE) {
+        state.appliedCoupon = COUPON_CODE;
+        saveState();
+        msg.textContent = `Cupón ${COUPON_CODE} aplicado: 10% de descuento activo.`;
+        msg.className = 'text-[11px] mt-1.5 text-emerald-700 font-semibold';
+        renderCart();
+        showToast('🎟️', `Cupón ${COUPON_CODE} aplicado (10% de descuento).`);
+      } else {
+        state.appliedCoupon = null;
+        saveState();
+        msg.textContent = 'Código inválido o expirado. Prueba con DESCUENTO202610.';
+        msg.className = 'text-[11px] mt-1.5 text-red-600 font-medium';
+        renderCart();
+      }
+    }
+
+    function calculateCartTotals() {
+      let subtotal = 0;
+      const detailed = [];
+      state.cart.forEach(item => {
+        const prod = state.products.find(p => p.id === item.productId);
+        if (prod) {
+          const lineTotal = prod.price * item.qty;
+          subtotal += lineTotal;
+          detailed.push({ ...prod, qty: item.qty, lineTotal });
+        }
+      });
+      const discount = state.appliedCoupon === COUPON_CODE ? Math.round(subtotal * COUPON_DISCOUNT_RATE) : 0;
+      const total = Math.max(0, subtotal - discount);
+      return { subtotal, discount, total, detailed };
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cartItemsContainer');
+      const { subtotal, discount, total, detailed } = calculateCartTotals();
+
+      if (detailed.length === 0) {
+        container.innerHTML = `<p class="text-xs text-campo-muted py-6 text-center">Tu carrito está vacío. Añade productos orgánicos.</p>`;
+      } else {
+        container.innerHTML = detailed.map(item => `
+          <div class="py-3 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="text-xl">${item.emoji}</span>
+              <div class="truncate">
+                <div class="text-xs font-semibold text-campo-ink truncate">${item.name}</div>
+                <div class="text-[11px] text-campo-muted">${formatCOP(item.price)} c/u</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="changeCartQty(${item.id}, -1)" class="w-6 h-6 rounded-full border border-campo-border text-xs font-bold hover:bg-campo-bg">−</button>
+              <span class="text-xs font-semibold w-5 text-center">${item.qty}</span>
+              <button type="button" onclick="changeCartQty(${item.id}, 1)" class="w-6 h-6 rounded-full border border-campo-border text-xs font-bold hover:bg-campo-bg">+</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('cartSubtotal').textContent = formatCOP(subtotal);
+      document.getElementById('cartDiscount').textContent = `-${formatCOP(discount)}`;
+      document.getElementById('cartTotal').textContent = formatCOP(total);
+    }
+
+    function checkoutOrder() {
+      const { subtotal, discount, total, detailed } = calculateCartTotals();
+      if (detailed.length === 0) {
+        showToast('🛒', 'Agrega al menos un producto antes de finalizar la compra.');
+        return;
+      }
+
+      const customerName = document.getElementById('checkoutName').value.trim() || 'Karla Martínez';
+      const customerAddress = document.getElementById('checkoutAddress').value.trim() || 'Bucaramanga, Santander';
+
+      for (const item of detailed) {
+        const prod = state.products.find(p => p.id === item.id);
+        if (!prod || prod.stock < item.qty) {
+          showToast('⚠️', `Stock insuficiente para ${item.name}.`);
+          return;
+        }
+      }
+
+      detailed.forEach(item => {
+        const prod = state.products.find(p => p.id === item.id);
+        if (prod) prod.stock -= item.qty;
+      });
+
+      const saleEntry = {
+        id: Date.now(),
+        date: new Date().toISOString().slice(0, 10),
+        concept: `Venta online (${customerName}) — ${detailed.map(d => `${d.name} x${d.qty}`).join(', ')}`,
+        category: 'Ingreso',
+        amount: total
+      };
+      state.accounting.push(saleEntry);
+      pushAccountingToSupabase(saleEntry);
+
+      const invoiceNumber = `CV-${Math.floor(100 + Math.random() * 900)}`;
+      const invoice = {
+        number: invoiceNumber,
+        date: new Date().toLocaleString('es-CO'),
+        customerName,
+        customerAddress,
+        coupon: state.appliedCoupon,
+        items: detailed,
+        subtotal,
+        discount,
+        total
+      };
+
+      state.lastInvoice = invoice;
+      state.cart = [];
+      state.appliedCoupon = null;
+      document.getElementById('couponInput').value = '';
+      saveState();
+
+      renderStore();
+      openInvoiceModal(invoice);
+      showToast('✅', `Compra confirmada (${invoiceNumber}). Stock descontado e ingreso registrado.`);
+    }
+
+    function openInvoiceModal(inv) {
+      document.getElementById('invCode').textContent = `Factura #${inv.number} • ${inv.date} • Estado: Aprobado`;
+      document.getElementById('invCustomerInfo').innerHTML = `
+        <div><strong>Cliente:</strong> ${inv.customerName}</div>
+        <div><strong>Dirección de entrega:</strong> ${inv.customerAddress}</div>
+        ${inv.coupon ? `<div><strong>Cupón aplicado:</strong> <span class="text-emerald-700 font-semibold">${inv.coupon}</span></div>` : ''}
+      `;
+      document.getElementById('invItemsList').innerHTML = inv.items.map(i => `
+        <div class="flex justify-between">
+          <span>${i.emoji} ${i.name} (${i.qty} × ${formatCOP(i.price)})</span>
+          <span class="font-semibold">${formatCOP(i.lineTotal)}</span>
+        </div>
+      `).join('');
+      document.getElementById('invTotalsBox').innerHTML = `
+        <div class="flex justify-between text-campo-muted"><span>Subtotal</span><span>${formatCOP(inv.subtotal)}</span></div>
+        <div class="flex justify-between text-emerald-700"><span>Descuento</span><span>-${formatCOP(inv.discount)}</span></div>
+        <div class="flex justify-between font-bold text-base text-campo-ink pt-1 border-t border-campo-border"><span>Total pagado</span><span>${formatCOP(inv.total)}</span></div>
+      `;
+      document.getElementById('invoiceModal').classList.remove('hidden');
+    }
+
+    function closeInvoiceModal() {
+      document.getElementById('invoiceModal').classList.add('hidden');
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. PORTAL DE INVERSIONISTAS Y CATÁLOGO DE GRANJAS
+    // -----------------------------------------------------------------------
+    function renderInvestorPortal() {
+      const totalInvested = state.investments.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+      document.getElementById('investorPortfolioTotal').textContent = formatCOP(totalInvested);
+      document.getElementById('investorPortfolioCount').textContent = `${state.investments.length} inversión(es) registrada(s)`;
+
+      const farmsGrid = document.getElementById('investorFarmsGrid');
+      if (!farmsGrid) return;
+
+      farmsGrid.innerHTML = state.farms.map(farm => {
+        const pct = Math.min(100, Math.round((Number(farm.fundingRaised || 0) / Math.max(1, Number(farm.fundingGoal || 1))) * 100));
+        return `
+          <article class="rounded-2xl bg-white border border-campo-border p-5 flex flex-col justify-between shadow-2xs space-y-4">
+            <div class="space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h3 class="font-editorial text-2xl text-campo-ink leading-tight">${farm.name}</h3>
+                  <p class="text-xs text-campo-muted">${farm.municipality}, Santander • Área: ${farm.area}</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">ROI ~${farm.roiEstimate}%</span>
+              </div>
+
+              <div class="text-xs text-campo-ink space-y-1 pt-1">
+                <div><strong>Cultivo:</strong> ${farm.mainCrop}</div>
+                <div><strong>Eficiencia IoT:</strong> ${farm.iotEfficiency}% (Sensores IP67)</div>
+              </div>
+
+              <div class="pt-2">
+                <div class="flex justify-between text-[11px] text-campo-muted mb-1">
+                  <span>Financiado: <strong>${formatCOP(farm.fundingRaised)}</strong></span>
+                  <span>${pct}% de ${formatCOP(farm.fundingGoal)}</span>
+                </div>
+                <div class="w-full h-2 rounded-full bg-[#EFECE3] overflow-hidden">
+                  <div class="h-full bg-campo-leaf rounded-full" style="width: ${pct}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-campo-border space-y-2">
+              <label class="block text-[11px] font-medium text-campo-muted">Monto a simular / aportar (COP)</label>
+              <div class="flex gap-2">
+                <input id="invAmount-${farm.id}" type="number" min="500000" step="500000" value="2000000" class="w-full rounded-xl border border-campo-border bg-campo-bg px-3 py-2 text-xs font-medium" />
+                <button type="button" onclick="investInFarm(${farm.id})" class="shrink-0 rounded-xl bg-campo-forest hover:bg-campo-forestHover text-white px-4 py-2 text-xs font-semibold transition">
+                  Invertir
+                </button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function investInFarm(farmId) {
+      const farm = state.farms.find(f => f.id === farmId);
+      const input = document.getElementById(`invAmount-${farmId}`);
+      if (!farm || !input) return;
+
+      const amount = Number(input.value);
+      if (Number.isNaN(amount) || amount < 500000) {
+        showToast('⚠️', 'Ingresa un monto mínimo de $500.000 COP para registrar la inversión.');
+        return;
+      }
+
+      const projectedReturn = Math.round(amount * (1 + Number(farm.roiEstimate || 22) / 100));
+      farm.fundingRaised = Number(farm.fundingRaised || 0) + amount;
+
+      state.investments.push({
+        id: Date.now(),
+        farmId: farm.id,
+        farmName: farm.name,
+        amount,
+        projectedReturn
+      });
+
+      pushInvestmentToSupabase(farm.id, amount, projectedReturn);
+      saveState();
+      renderInvestorPortal();
+      showToast('📈', `Inversión de ${formatCOP(amount)} registrada en ${farm.name} (retorno estimado: ${formatCOP(projectedReturn)}).`);
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. INICIALIZACIÓN
+    // -----------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      const dateEl = document.getElementById('currentDateLabel');
+      if (dateEl) {
+        dateEl.textContent = new Date().toLocaleDateString('es-CO', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        });
+      }
+      renderCurrentView();
+      syncFromSupabaseIfConfigured();
+    });
+  </script>
+</body>
+</html>
