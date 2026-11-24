@@ -81,14 +81,14 @@
     </div>
   </div>
 
-  <!-- Notificación Toast -->
+  
   <div id="toast" class="no-print fixed bottom-5 right-5 z-50 hidden max-w-sm rounded-xl bg-campo-forest text-white px-4 py-3 shadow-lg border border-emerald-700 text-sm flex items-start gap-2.5">
     <span id="toastIcon">🌱</span>
     <div id="toastMessage" class="leading-snug"></div>
   </div>
 
   <!-- ===================================================================== -->
-  <!-- VISTA 1: LOGIN Y REGISTRO MULTI-ROL (US 1.1.1, US 1.1.2, US 1.2.1)     -->
+  <!-- VISTA 1: LOGIN Y REGISTRO MULTI-ROL                                   -->
   <!-- ===================================================================== -->
   <section id="view-login" class="flex-1 grid grid-cols-1 lg:grid-cols-2 min-h-[calc(100vh-36px)]">
     <!-- Columna Izquierda: Fotografía / Escena de Campo -->
@@ -116,7 +116,7 @@
       </div>
     </div>
 
-    <!-- Columna Derecha: Formulario de Acceso / Registro -->
+    
     <div class="flex items-center justify-center p-6 sm:p-10 lg:p-14 bg-campo-bg overflow-y-auto">
       <div class="w-full max-w-md">
         <!-- Marca -->
@@ -131,11 +131,11 @@
           </div>
         </div>
 
-        <!-- MODO INICIAR SESIÓN -->
+       
         <div id="loginFormContainer">
           <h1 class="font-editorial text-3xl sm:text-4xl text-campo-ink mb-6">Bienvenido de vuelta</h1>
 
-          <!-- Selector de Rol -->
+     
           <div class="grid grid-cols-3 gap-1.5 bg-[#EFECE3] p-1.5 rounded-xl mb-6">
             <button type="button" data-role="Agricultor" onclick="selectLoginRole('Agricultor')" class="role-btn py-2 px-2 rounded-lg text-xs sm:text-sm font-medium bg-white text-campo-ink shadow-sm transition">
               Agricultor
@@ -189,7 +189,7 @@
             <button type="button" onclick="switchAuthMode('register')" class="text-campo-leaf font-semibold hover:underline">Regístrate aquí</button>
           </p>
 
-          <!-- Accesos rápidos para sustentación -->
+     
           <div class="mt-6 pt-5 border-t border-campo-border">
             <p class="text-[11px] uppercase tracking-wider text-campo-muted font-semibold mb-2.5">Acceso rápido para demo (1 clic)</p>
             <div class="grid grid-cols-3 gap-2">
@@ -206,12 +206,12 @@
           </div>
         </div>
 
-        <!-- MODO REGISTRO MULTI-ROL -->
+     
         <div id="registerFormContainer" class="hidden">
           <h1 class="font-editorial text-3xl text-campo-ink mb-2">Crear cuenta en CampoVivo</h1>
           <p class="text-xs text-campo-muted mb-5">Regístrate como Agricultor (y crea tu granja), Inversionista o Cliente.</p>
 
-          <!-- Selector de Rol en Registro -->
+        
           <div class="grid grid-cols-3 gap-1.5 bg-[#EFECE3] p-1.5 rounded-xl mb-5">
             <button type="button" data-reg-role="Agricultor" onclick="selectRegisterRole('Agricultor')" class="reg-role-btn py-2 px-2 rounded-lg text-xs font-medium bg-white text-campo-ink shadow-sm transition">
               Agricultor
@@ -390,9 +390,9 @@
       </div>
     </aside>
 
-    <!-- Contenido Principal del Agricultor -->
+   
     <div class="flex-1 flex flex-col bg-campo-bg">
-      <!-- Topbar -->
+     
       <header class="no-print bg-campo-bg border-b border-campo-border px-6 py-3.5 flex items-center justify-between">
         <div class="text-xs sm:text-sm text-campo-muted" id="currentDateLabel">Martes, 24 de noviembre de 2026</div>
         <div class="flex items-center gap-3">
@@ -425,7 +425,7 @@
           </div>
         </div>
 
-        <!-- Banner de Alerta Temprana (se oculta automáticamente cuando no hay alertas) -->
+      
         <div id="iotAlertBanner" class="hidden rounded-xl bg-campo-alertBg border border-campo-alertBorder px-4 py-3 text-xs sm:text-sm text-campo-alertText flex items-center justify-between gap-3">
           <div class="flex items-center gap-2.5">
             <span>⚠️</span>
@@ -434,7 +434,6 @@
           <button id="reconnectEsp32Btn" onclick="reconnectEsp32_05()" class="hidden shrink-0 underline font-semibold hover:opacity-80">Reconectar ESP32-05</button>
         </div>
 
-        <!-- Simulador Interactivo Broker MQTT & Nodos ESP32 -->
         <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-campo-border pb-3">
             <div>
@@ -487,7 +486,6 @@
           </div>
         </div>
 
-        <!-- 4 Tarjetas KPI -->
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">TEMP. PROMEDIO</div>
@@ -514,7 +512,6 @@
           </div>
         </div>
 
-        <!-- Gráfico de Telemetría Últimas 24 Horas · Lote A -->
         <div class="rounded-2xl bg-white border border-campo-border p-5 sm:p-6 shadow-2xs">
           <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 class="font-editorial text-xl sm:text-2xl text-campo-ink">Últimas 24 horas · Lote A</h2>
@@ -525,7 +522,7 @@
           </div>
         </div>
 
-        <!-- Estado de Nodos ESP32 -->
+
         <div class="rounded-2xl bg-white border border-campo-border p-5 shadow-2xs">
           <h3 class="font-editorial text-xl text-campo-ink mb-3">Estado de nodos en campo (IP67)</h3>
           <div id="nodesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
@@ -544,7 +541,6 @@
           </button>
         </div>
 
-        <!-- Resumen Financiero -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="rounded-2xl bg-white border border-campo-border p-5">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-campo-muted">INGRESOS ACUMULADOS</div>
@@ -561,7 +557,7 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Formulario Nuevo Movimiento -->
+          
           <form id="accountingForm" onsubmit="addAccountingEntry(event)" class="rounded-2xl bg-white border border-campo-border p-5 space-y-4 h-fit">
             <h2 class="font-editorial text-2xl text-campo-ink">Registrar movimiento</h2>
             <div>
@@ -745,7 +741,6 @@
 
           <div id="cartItemsContainer" class="divide-y divide-campo-border min-h-[110px]"></div>
 
-          <!-- Cupón de Descuento -->
           <div class="pt-2">
             <div class="flex gap-2">
               <input
